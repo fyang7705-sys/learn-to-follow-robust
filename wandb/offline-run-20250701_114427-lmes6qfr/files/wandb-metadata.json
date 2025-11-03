@@ -1,0 +1,43 @@
+{
+    "os": "Linux-5.4.0-132-generic-x86_64-with-glibc2.29",
+    "python": "3.8.10",
+    "heartbeatAt": "2025-07-01T11:44:27.262800",
+    "startedAt": "2025-07-01T11:44:27.205348",
+    "docker": null,
+    "gpu": "Quadro RTX 8000",
+    "gpu_count": 1,
+    "cpu_count": 80,
+    "cuda": null,
+    "args": [
+        "--actor_critic_share_weights=True",
+        "--batch_size=16384",
+        "--env=PogemaMazes-v0",
+        "--exploration_loss_coeff=0.023",
+        "--extra_fc_layers=1",
+        "--gamma=0.9756",
+        "--hidden_size=512",
+        "--intrinsic_target_reward=0.01",
+        "--learning_rate=0.00022",
+        "--lr_schedule=constant",
+        "--network_input_radius=5",
+        "--num_filters=64",
+        "--num_res_blocks=8",
+        "--num_workers=8",
+        "--optimizer=adam",
+        "--ppo_clip_ratio=0.2",
+        "--train_for_env_steps=1000000000",
+        "--use_rnn=True"
+    ],
+    "state": "running",
+    "program": "main.py",
+    "codePath": "main.py",
+    "git": {
+        "remote": "https://github.com/AIRI-Institute/learn-to-follow.git",
+        "commit": "7463ad24d0c50ca6ca20d627c04931b43c66a4b7"
+    },
+    "email": null,
+    "root": "/home/learn-to-follow",
+    "host": "81a19b8bafdf",
+    "username": "root",
+    "executable": "/usr/bin/python3"
+}

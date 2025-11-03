@@ -106,6 +106,9 @@ class FollowerInference:
         config.num_envs = 1
 
         env = make_env_func_batched(config, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
+        # print(f"config: {config}\n")
+        print(f"env.observation_space: {env.observation_space}\n")
+        print(f"env.action_space{env.action_space}\n")
         actor_critic = create_actor_critic(config, env.observation_space, env.action_space)
         actor_critic.eval()
         env.close()
@@ -141,7 +144,7 @@ class FollowerInference:
     def act(self, observations):
         self.rnn_states = torch.zeros([len(observations), get_rnn_size(self.cfg)], dtype=torch.float32,
                                       device=self.device) if self.rnn_states is None else self.rnn_states
-
+        print(f"observations:{observations}\n")
         obs = AttrDict(self.transform_dict_observations(observations))
         with torch.no_grad():
             policy_outputs = self.net(prepare_and_normalize_obs(self.net, obs), self.rnn_states)

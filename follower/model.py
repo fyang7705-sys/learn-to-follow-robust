@@ -100,7 +100,7 @@ class ResnetEncoder(Encoder):
         curr_input_channels = input_ch
         layers = []
 
-        for out_channels, res_blocks in resnet_conf:
+        for out_channels, res_blocks in resnet_conf: # resnet coef似乎只有一个元素？
             layers.extend([nn.Conv2d(curr_input_channels, out_channels, kernel_size=3, stride=1, padding=1)])
             layers.extend([ResBlock(self.encoder_cfg, out_channels, out_channels) for _ in range(res_blocks)])
             curr_input_channels = out_channels

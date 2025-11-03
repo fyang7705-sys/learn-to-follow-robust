@@ -1,0 +1,194 @@
+wandb_version: 1
+
+environment:
+  desc: null
+  value:
+    grid_config:
+      MOVES:
+      - - 0
+        - 0
+      - - -1
+        - 0
+      - - 1
+        - 0
+      - - 0
+        - -1
+      - - 0
+        - 1
+      FREE: 0
+      OBSTACLE: 1
+      empty_outside: true
+      on_target: restart
+      seed: null
+      size: 8
+      density: 0.3
+      num_agents: 64
+      obs_radius: 5
+      agents_xy: null
+      targets_xy: null
+      possible_agents_xy: null
+      possible_targets_xy: null
+      collision_system: soft
+      persistent: false
+      observation_type: POMAPF
+      map: null
+      map_name: mazes-.+
+      integration: SampleFactory
+      max_episode_steps: 512
+      auto_reset: 0
+    env: PogemaMazes-v0
+    with_animation: false
+    worker_index: null
+    vector_index: null
+    env_id: null
+    target_num_agents: 256
+    agent_bins:
+    - 128
+    - 256
+    - 256
+    - 256
+    use_maps: true
+    every_step_metrics: false
+encoder:
+  desc: null
+  value:
+    extra_fc_layers: 1
+    num_filters: 64
+    num_res_blocks: 8
+    activation_func: ReLU
+    hidden_size: 512
+preprocessing:
+  desc: null
+  value:
+    use_static_cost: true
+    use_dynamic_cost: true
+    reset_dynamic_cost: true
+    network_input_radius: 5
+    intrinsic_target_reward: 0.01
+rollout:
+  desc: null
+  value: 8
+num_workers:
+  desc: null
+  value: 8
+recurrence:
+  desc: null
+  value: 8
+use_rnn:
+  desc: null
+  value: true
+rnn_size:
+  desc: null
+  value: 256
+ppo_clip_ratio:
+  desc: null
+  value: 0.2
+batch_size:
+  desc: null
+  value: 16384
+exploration_loss_coeff:
+  desc: null
+  value: 0.023
+num_envs_per_worker:
+  desc: null
+  value: 4
+worker_num_splits:
+  desc: null
+  value: 1
+max_policy_lag:
+  desc: null
+  value: 1
+force_envs_single_thread:
+  desc: null
+  value: true
+optimizer:
+  desc: null
+  value: adam
+restart_behavior:
+  desc: null
+  value: overwrite
+normalize_returns:
+  desc: null
+  value: false
+async_rl:
+  desc: null
+  value: false
+num_batches_per_epoch:
+  desc: null
+  value: 16
+num_batches_to_accumulate:
+  desc: null
+  value: 1
+normalize_input:
+  desc: null
+  value: false
+save_best_metric:
+  desc: null
+  value: avg_throughput
+value_bootstrap:
+  desc: null
+  value: true
+save_milestones_sec:
+  desc: null
+  value: -1
+keep_checkpoints:
+  desc: null
+  value: 1
+stats_avg:
+  desc: null
+  value: 10
+learning_rate:
+  desc: null
+  value: 0.00022
+train_for_env_steps:
+  desc: null
+  value: 1000000000
+gamma:
+  desc: null
+  value: 0.9756
+lr_schedule:
+  desc: null
+  value: constant
+experiment:
+  desc: null
+  value: exp
+train_dir:
+  desc: null
+  value: experiments/train_dir
+seed:
+  desc: null
+  value: 42
+use_wandb:
+  desc: null
+  value: true
+env:
+  desc: null
+  value: PogemaMazes-v0
+decoder_mlp_layers:
+  desc: null
+  value: []
+_wandb:
+  desc: null
+  value:
+    python_version: 3.8.10
+    cli_version: 0.13.4
+    framework: torch
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    start_time: 1751370267
+    t:
+      1:
+      - 1
+      - 2
+      - 3
+      2:
+      - 1
+      - 2
+      - 3
+      3:
+      - 4
+      - 16
+      - 35
+      - 42
+      4: 3.8.10
+      5: 0.13.4
