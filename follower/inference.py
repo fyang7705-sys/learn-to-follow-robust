@@ -2,7 +2,6 @@ from pogema_toolbox.algorithm_config import AlgoBase
 
 from follower.preprocessing import PreprocessorConfig
 # noinspection PyUnresolvedReferences
-from utils import fix_num_threads_issue
 
 import json
 from copy import deepcopy
@@ -38,7 +37,8 @@ from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
 # from follower.algorithm_utils import AlgoBase
 
 from follower.register_training_utils import register_custom_model
-
+from pathlib import Path
+from datetime import datetime
 
 class FollowerInferenceConfig(AlgoBase, extra=Extra.forbid):
     """
@@ -88,13 +88,13 @@ class FollowerInference:
     """
 
     def __init__(self, config):
-
         self.algo_cfg: FollowerInferenceConfig = config
         device = config.device
 
         register_custom_model()
         self.path = config.path_to_weights
 
+        
         with open(join(self.path, 'config.json'), "r") as f:
             flat_config = json.load(f)
             self.exp = Experiment(**flat_config)
@@ -104,7 +104,10 @@ class FollowerInference:
         config = flat_config
 
         config.num_envs = 1
-
+        self.save_json = config.save_json
+        if self.save_json:
+            self.save_dir = config.save_dir
+            Path(config.save_dir).mkdir(parents=True, exist_ok=True)
         env = make_env_func_batched(config, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
         # print(f"config: {config}\n")
         print(f"env.observation_space: {env.observation_space}\n")
@@ -140,16 +143,46 @@ class FollowerInference:
         self.cfg = config
 
         self.rnn_states = None
+        self.observations = None # 用于给学生策略传递观测
 
+    def collect_data(self, normalized_obs, rnn_states, policy_outputs):
+        os.makedirs(self.save_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+
+        save_path = os.path.join(self.save_dir, f"sample_{timestamp}.pt")
+
+        data_to_save = {
+            "normalized_obs": {k: v.detach().cpu() for k, v in normalized_obs.items()},
+            "rnn_states": rnn_states.detach().cpu() ,
+            "policy_outputs": {
+                k: v.detach().cpu()
+                for k, v in policy_outputs.items()
+                if k in ['actions', 'action_logits', 'log_prob_actions']
+            }
+        }
+
+        # 保存为pt格式
+        torch.save(data_to_save, save_path)
+    
     def act(self, observations):
+        self.observations = observations
         self.rnn_states = torch.zeros([len(observations), get_rnn_size(self.cfg)], dtype=torch.float32,
                                       device=self.device) if self.rnn_states is None else self.rnn_states
-        print(f"observations:{observations}\n")
+        # print(f"observations shape: {len(observations)}\n")
+        # print(f"observations:{observations[0]}\n")
         obs = AttrDict(self.transform_dict_observations(observations))
         with torch.no_grad():
-            policy_outputs = self.net(prepare_and_normalize_obs(self.net, obs), self.rnn_states)
-
+            normalized_obs = prepare_and_normalize_obs(self.net, obs)
+            # print("normalized_obs shape", {k: v.shape for k, v in normalized_obs.items()})
+            policy_outputs = self.net(normalized_obs, self.rnn_states)
+            if self.save_json:
+                self.collect_data(normalized_obs, self.rnn_states, policy_outputs)
+        # print(f"observations after prepare_and_normalize_obs:{obs}\n")
         self.rnn_states = policy_outputs['new_rnn_states']
+        # print(f"policy_outputs:, {policy_outputs}\n")
+
+
+
         return policy_outputs['actions'].cpu().numpy()
 
     def reset_states(self):

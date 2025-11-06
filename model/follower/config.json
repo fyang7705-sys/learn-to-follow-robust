@@ -1,4 +1,6 @@
 {
+  "save_json": false,
+  "save_dir": "teacher_data",
   "help": false,
   "algo": "APPO",
   "env": "PogemaMazes-v0",
