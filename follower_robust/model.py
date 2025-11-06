@@ -94,4 +94,5 @@ def make_student_model(cfg_path):
         action_space=env.action_space,  # will be inferred from data
         cfg=config  # default config
     )
+    env.close()
     return student

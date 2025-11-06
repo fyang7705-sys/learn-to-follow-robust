@@ -27,7 +27,10 @@ algorithms:
     name: Follower
     num_process: 4
     parallel_backend: 'balanced_dask'
-
+  FollowerRobust:
+    name: FollowerRobust
+    num_process: 4
+    parallel_backend: 'balanced_dask'
   FollowerLite:
     name: FollowerLite
     num_process: 4

@@ -10,8 +10,8 @@ from datetime import datetime
 
 def train_distill(
     data_dir: str,
-    config_dir: str = "model/follower",
-    save_model_path: str = "/model/follower-robust/checkpoint/",
+    config_dir: str = "model/follower-robust",
+    save_model_path: str = "model/follower-robust/checkpoint/",
     epochs: int = 10,
     batch_files: int = 16,
     lr: float = 1e-3,
@@ -64,10 +64,10 @@ def train_distill(
         print(f"[Epoch {ep+1}/{epochs}] avg_loss={avg_loss:.6f}")
 
         # epoch end -> optionally save intermediate
-        torch.save({"student_state": student.state_dict(), "epoch": ep+1}, save_model_path)
+        torch.save(student.state_dict(), save_model_path)
 
     # final save
-    torch.save({"student_state": student.state_dict(), "epoch": epochs}, save_model_path)
+    torch.save(student.state_dict(), save_model_path)
     print(f"Saved final student to {save_model_path}")
 
 

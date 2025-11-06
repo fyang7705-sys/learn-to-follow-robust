@@ -15,29 +15,30 @@ from follower.inference import FollowerInference, FollowerInferenceConfig
 from follower.preprocessing import follower_preprocessor
 from follower_cpp.inference import FollowerConfigCPP, FollowerInferenceCPP
 from follower_cpp.preprocessing import follower_cpp_preprocessor
-
+from follower_robust.inference import FollowerConfigRobust, FollowerInferenceRobust
 PROJECT_NAME = 'pogema-toolbox'
 BASE_PATH = Path('experiments')
 
 
-def main(disable_wandb=False):
+def main(disable_wandb=True):
     ToolboxRegistry.register_env('Pogema-v0', create_env_base, Environment)
     ToolboxRegistry.register_algorithm('A*', BatchAStarAgent)
     ToolboxRegistry.register_algorithm('Follower', FollowerInference, FollowerInferenceConfig,
                                        follower_preprocessor)
     ToolboxRegistry.register_algorithm('FollowerLite', FollowerInferenceCPP, FollowerConfigCPP,
                                        follower_cpp_preprocessor)
-
+    ToolboxRegistry.register_algorithm('FollowerRobust', FollowerInferenceRobust, FollowerConfigRobust,
+                                       follower_preprocessor)
     with open("env/test-maps.yaml", 'r') as f:
         maps_to_register = yaml.safe_load(f)
     ToolboxRegistry.register_maps(maps_to_register)
 
     folder_names = [
         '01-random-20x20',
-        '02-mazes',
-        '03-den520d',
-        '04-Paris_1',
-        '05-warehouse',
+        # '02-mazes',
+        # '03-den520d',
+        # '04-Paris_1',
+        # '05-warehouse',
     ]
 
     for folder in folder_names:
