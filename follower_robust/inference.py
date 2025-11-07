@@ -102,7 +102,7 @@ class FollowerInferenceRobust:
             checkpoints = sorted(paths)[-1] 
 
         log.info(f'Loading weights from {checkpoints}')
-        state_dict = torch.load(checkpoints, map_location=device) 
+        state_dict = torch.load(checkpoints, map_location=device, weights_only=True) 
         student.load_state_dict(state_dict)
 
         self.net = student

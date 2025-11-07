@@ -11,7 +11,8 @@ from follower.register_training_utils import register_custom_model
 
 from argparse import Namespace
 
-from torch import nn, Tensor
+import torch
+from torch import  Tensor
 import os
 import json
 from typing import Dict, Optional
@@ -73,7 +74,7 @@ class DistilledActor(ActorCritic):
         return result
         
         
-def make_student_model(cfg_path):
+def make_student_model(cfg_path, resume_path: Optional[str] = None):
 
     register_custom_model()
     with open(os.path.join(cfg_path, 'config.json'), "r") as f:
@@ -94,5 +95,9 @@ def make_student_model(cfg_path):
         action_space=env.action_space,  # will be inferred from data
         cfg=config  # default config
     )
+    if resume_path is not None:
+        checkpoint = torch.load(resume_path, map_location="cpu")
+        student.load_state_dict(checkpoint['model_state_dict'])
+        print(f"Loaded student model from {resume_path}")
     env.close()
     return student
