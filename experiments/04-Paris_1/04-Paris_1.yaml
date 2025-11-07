@@ -16,11 +16,11 @@ algorithms:
     num_process: 4
     parallel_backend: 'balanced_dask'
 
-  FollowerLite:
-    name: FollowerLite
-    num_process: 4
-    num_threads: 4
-    parallel_backend: 'balanced_dask'
+  # FollowerLite:
+  #   name: FollowerLite
+  #   num_process: 4
+  #   num_threads: 4
+  #   parallel_backend: 'balanced_dask'
   FollowerRobust:
     name: FollowerRobust
     num_process: 4
@@ -41,5 +41,5 @@ results_views:
     legend_font_size: 8
     font_size: 8
     name: Paris_1 $64 \times 64$
-    hue_order: [ Follower, FollowerLite, ]
+    hue_order: [ Follower, FollowerLite, FollowerRobust]
     ticks: [ 32, 64, 128, 256 ]

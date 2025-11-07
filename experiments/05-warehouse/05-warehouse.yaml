@@ -20,23 +20,23 @@ algorithms:
       num_process: 4
       parallel_backend: 'balanced_dask'  
 
-  No dynamic cost:
-    name: Follower
-    num_process: 4
-    parallel_backend: 'balanced_dask'
+  # No dynamic cost:
+  #   name: Follower
+  #   num_process: 4
+  #   parallel_backend: 'balanced_dask'
     
-    override_config:
-      preprocessing:
-        use_dynamic_cost: False
+  #   override_config:
+  #     preprocessing:
+  #       use_dynamic_cost: False
 
-  No static cost:
-    name: Follower
-    num_process: 4
-    parallel_backend: 'balanced_dask'
+  # No static cost:
+  #   name: Follower
+  #   num_process: 4
+  #   parallel_backend: 'balanced_dask'
     
-    override_config:
-      preprocessing:
-        use_static_cost: False
+  #   override_config:
+  #     preprocessing:
+  #       use_static_cost: False
   
 results_views:
   TabularResults:
@@ -55,6 +55,6 @@ results_views:
     line_width: 2
     legend_font_size: 6
     font_size: 8
-    hue_order: [ Follower, _, "No dynamic cost", "No static cost", ]
+    hue_order: [ Follower, _, "No dynamic cost", "No static cost",FollowerRobust ]
     ticks: [ 32, 64, 96, 128, 160, 192 ]
     name: Warehouse $46 \times 33$
