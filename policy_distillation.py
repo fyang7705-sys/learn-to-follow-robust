@@ -1,6 +1,6 @@
 from follower_robust.dataloader import DistillationDataset, collate_fn
 from follower_robust.model import make_student_model
-
+from follower_robust.loss import pgm_loss, jacobian_regularization
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -16,6 +16,9 @@ def train_distill(
     batch_files: int = 16,
     lr: float = 1e-3,
     temp: float = 1.0,
+    mode: str = "kl",
+    max_samples = None,
+    resume_path = None,
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
 ):
     print(f"Using device: {device}")
@@ -24,10 +27,10 @@ def train_distill(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
     save_model_path = os.path.join(save_model_path, f"student_{timestamp}.pt")
-    ds = DistillationDataset(data_dir=data_dir, obs_keys=None, output_keys=["action_logits"])
+    ds = DistillationDataset(data_dir=data_dir, obs_keys=None, output_keys=["action_logits"], max_samples = max_samples)
     loader = DataLoader(ds, batch_size=batch_files, shuffle=True, collate_fn=collate_fn, num_workers=0)
     
-    student = make_student_model(config_dir)
+    student = make_student_model(config_dir, resume_path=resume_path)
     student.to(device)
     optimizer = torch.optim.Adam(student.parameters(), lr=lr)
     kl_loss = nn.KLDivLoss(reduction="batchmean")
@@ -40,24 +43,49 @@ def train_distill(
         for batch in loader:
             obs = {k: v.to(device) for k, v in batch["normalized_obs"].items()}
             rnn = batch["rnn_states"].to(device)
+            if mode == "kl":
+                t_logits = batch["policy_outputs"]["action_logits"].to(device)  # shape [N, action_dim]
+                
+                # teacher soft targets
+                with torch.no_grad():
+                    t_soft = F.softmax(t_logits / temp, dim=-1)
 
-            t_logits = batch["policy_outputs"]["action_logits"].to(device)  # shape [N, action_dim]
-            # teacher soft targets
-            with torch.no_grad():
-                t_soft = F.softmax(t_logits / temp, dim=-1)
+                # student forward
+                s_logits = student(obs, rnn)['action_logits']  # [N, action_dim]
 
-            # student forward
-            s_logits = student(obs, rnn)['action_logits']  # [N, action_dim]
+                # KL Loss: KL( teacher || student ) implemented as KLDivLoss(log_softmax(student), soft_teacher)
+                log_p = F.log_softmax(s_logits / temp, dim=-1)
+                loss_kl = kl_loss(log_p, t_soft) * (temp * temp)
 
-            # KL Loss: KL( teacher || student ) implemented as KLDivLoss(log_softmax(student), soft_teacher)
-            log_p = F.log_softmax(s_logits / temp, dim=-1)
-            loss_kl = kl_loss(log_p, t_soft) * (temp * temp)
+                optimizer.zero_grad()
+                loss_kl.backward()
+                optimizer.step()
+                total_loss += loss_kl.item()
+            
+            else: # A2PD
+                t_logits = batch["policy_outputs"]["action_logits"].to(device)  # shape [N, action_dim]
+                teacher_actions = torch.argmax(t_logits, dim=-1)
+                obs_tensor = obs["obs"]
+                obs_tensor.requires_grad_(True)
 
-            optimizer.zero_grad()
-            loss_kl.backward()
-            optimizer.step()
 
-            total_loss += loss_kl.item()
+                # student forward
+                s_logits = student(obs, rnn)['action_logits']
+                s_probs = F.softmax(s_logits, dim=-1)
+
+                # === A2PD loss ===
+                eta = 0.3
+                beta = 0.01
+                
+                loss_pgm = pgm_loss(s_probs, teacher_actions, eta)
+                loss_jr = jacobian_regularization(loss_pgm, obs_tensor)
+                loss = loss_pgm + beta * loss_jr
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                total_loss += loss.item()
+            
             n_batches += 1
 
         avg_loss = total_loss / max(1, n_batches)
@@ -80,6 +108,9 @@ if __name__ == "__main__":
     parser.add_argument("--batch_files", type=int, default=16)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--temp", type=float, default=1.0)
+    parser.add_argument("--mode", type=str, default="kl", choices=["kl", "a2pd"])
+    parser.add_argument("--max_samples", type=int, default=None)
+    parser.add_argument("--resume_path", type=str, default=None)
     args = parser.parse_args()
     
     
@@ -89,5 +120,8 @@ if __name__ == "__main__":
         epochs=args.epochs,
         batch_files=args.batch_files,
         lr=args.lr,
-        temp=args.temp
+        temp=args.temp,
+        mode = args.mode,
+        max_samples = args.max_samples,
+        resume_path = args.resume_path
     )
