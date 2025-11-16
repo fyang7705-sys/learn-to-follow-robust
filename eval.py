@@ -49,7 +49,6 @@ def main(disable_wandb=True):
             evaluation_config = yaml.safe_load(f)
         if folder == 'eval-fast':
             disable_wandb = True
-
         initialize_wandb(evaluation_config, eval_dir, disable_wandb, PROJECT_NAME)
         evaluation(evaluation_config, eval_dir=eval_dir)
         save_evaluation_results(eval_dir)

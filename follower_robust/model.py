@@ -16,6 +16,26 @@ from torch import  Tensor
 import os
 import json
 from typing import Dict, Optional
+import torch.nn as nn
+
+class FlattenMlp(nn.Module):
+    def __init__(self, input_size, output_size, hidden_sizes):
+        super().__init__()
+        layers = []
+        last_size = input_size
+        for h in hidden_sizes:
+            layers.append(nn.Linear(last_size, h))
+            layers.append(nn.ReLU())
+            last_size = h
+        layers.append(nn.Linear(last_size, output_size))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, *inputs):
+        # Flatten and concat all inputs
+        x = torch.cat(inputs, dim=-1)
+        return self.net(x)
+
+
 
 class DistilledActor(ActorCritic):
     def __init__(

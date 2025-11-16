@@ -16,6 +16,26 @@ def pgm_loss(student_probs, teacher_actions, eta=0.3, eps=1e-8):
         batch_loss.append(loss_i)
     return torch.stack(batch_loss).mean()
 
+# metric loss in FOCAL
+def metric_loss(z, tasks, epsilon=1e-3):
+    # z shape is (task, dim)
+    pos_z_loss = 0.
+    neg_z_loss = 0.
+    pos_cnt = 0
+    neg_cnt = 0
+    for i in range(len(tasks)):
+        for j in range(i+1, len(tasks)):
+            # positive pair
+            if tasks[i] == tasks[j]:
+                pos_z_loss += torch.sqrt(torch.mean((z[i] - z[j]) ** 2) + epsilon)
+                pos_cnt += 1
+            else:
+                neg_z_loss += 1/(torch.mean((z[i] - z[j]) ** 2) + epsilon * 100)
+                neg_cnt += 1
+    #print(pos_z_loss, pos_cnt, neg_z_loss, neg_cnt)
+    return pos_z_loss/(pos_cnt + epsilon) +  neg_z_loss/(neg_cnt + epsilon)
+
+
 
 def jacobian_regularization(loss_pgm, obs_tensor):
 

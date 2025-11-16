@@ -1,5 +1,5 @@
 {
-  "save_json": true,
+  "save_json": false,
   "save_dir": "teacher_data",
   "help": false,
   "algo": "APPO",

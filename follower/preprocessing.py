@@ -20,6 +20,7 @@ def wrap_preprocessors(env, config: PreprocessorConfig, auto_reset=False):
     env = FollowerWrapper(env=env, config=config)
     env = CutObservationWrapper(env, target_observation_radius=config.network_input_radius)
     env = ConcatPositionalFeatures(env)
+    # env = EncodeDataCollectionWrapper(env)
     if auto_reset:
         env = AutoResetWrapper(env)
     return env
@@ -171,6 +172,18 @@ class ConcatPositionalFeatures(ObservationWrapper):
             return '1_' + x
         return '2_' + x
 
+
+class EncodeDataCollectionWrapper(ObservationWrapper):
+    def observation(self, observations):
+        for agent_idx, obs in enumerate(observations):
+            for key in obs:
+                if key != 'id':
+                    obs[key] = np.array(obs[key], dtype=np.float32)
+        return observations
+    
+    def step(self, action):
+        observations, reward, terminated, truncated, info = self.env.step(action)
+        return self.observation(observations), reward, terminated, truncated, info
 
 class AutoResetWrapper(gymnasium.Wrapper):
     def step(self, action):
