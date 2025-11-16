@@ -164,3 +164,4 @@ wandb/
 
 # data
 teacher_data/
+encode_data/
