@@ -16,47 +16,59 @@ def bug_action(action_outputs, bug_prob):
     return action_outputs
 
 
+WINDOW_SIZE = 5  
 
 def run_episode(env, algo):
     global prob_index
     bug_prob = bug_probs[prob_index]
     algo.reset_states()
     results_holder = ResultsHolder()
-    save_dir = "encode_data"
+
+    save_dir = f"encoder_data/{WINDOW_SIZE}"
     os.makedirs(save_dir, exist_ok=True)
 
+    buffer_obs = []
+    buffer_actions = []
+    buffer_rewards = []
+
     obs, _ = env.reset(seed=env.grid_config.seed)
+
     while True:
         old_obs = copy.deepcopy(obs)
+
         action = algo.act(obs)
         action = bug_action(action, bug_prob)
+
         obs, rew, terminated, truncated, infos = env.step(action)
         results_holder.after_step(infos)
-        # print("\n===== OBS STRUCTURE =====")
-        # pprint.pprint(obs)
-        # print("===== OBS TYPE =====")
-        # print(type(obs))
-        # if isinstance(obs, list):
-        #     print("List length:", len(obs))
-        #     if len(obs) > 0:
-        #         print("Type of obs[0]:", type(obs[0]))
-        #         if isinstance(obs[0], dict):
-        #             print("Keys of obs[0]:", list(obs[0].keys()))
-        # print("==========================\n")
-        data_to_save = {
-            "old_obs": old_obs,
-            "new_obs": obs,
-            "actions": torch.tensor(action),
-            "rewards": torch.tensor(rew),
-            "label": bug_prob,
-        }
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        save_path = os.path.join(save_dir, f"sample_{timestamp}.pt")
 
-        # 保存为pt格式
-        torch.save(data_to_save, save_path)
+        buffer_obs.append(obs)
+        buffer_actions.append(torch.tensor(action))
+        buffer_rewards.append(torch.tensor(rew))
+
+        if len(buffer_obs) == WINDOW_SIZE:
+
+            data_to_save = {
+                "obs": torch.stack(buffer_obs),
+                "actions": torch.stack(buffer_actions),
+                "rewards": torch.stack(buffer_rewards),
+                "label": bug_prob,
+            }
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            save_path = os.path.join(
+                save_dir,
+                f"sample_{WINDOW_SIZE}_{timestamp}_{bug_prob:.1f}_{np.random.randint(1000)}.pt"
+            )
+
+            torch.save(data_to_save, save_path)
+
+            buffer_obs.clear()
+            buffer_actions.clear()
+            buffer_rewards.clear()
 
         if all(terminated) or all(truncated):
             break
+
     prob_index = (prob_index + 1) % len(bug_probs)
     return results_holder.get_final()

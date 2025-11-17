@@ -62,7 +62,7 @@ class MLPEncoder(nn.Module):
         #print(z.shape)
         return z
 
-class CNNEncoderForObs(nn.Module):
+class CNNEncoder(nn.Module):
     def __init__(self,
                  hidden_size=64,
                  task_embedding_size=32,
@@ -100,12 +100,12 @@ class CNNEncoderForObs(nn.Module):
         return F.normalize(out) if self.normalize else out
 
     def context_encoding(self, obs, actions, rewards, next_obs, terms):
-        n_timesteps, batch_size = obs.shape[:2]
-        obs = obs.reshape(n_timesteps*batch_size, *self.obs_shape)
-        next_obs = next_obs.reshape(n_timesteps*batch_size, *self.obs_shape)
-        actions = actions.reshape(n_timesteps*batch_size, -1)
-        rewards = rewards.reshape(n_timesteps*batch_size, -1)
-        terms = terms.reshape(n_timesteps*batch_size, -1)
+        batch_size = obs.shape[0]
+        obs = obs.reshape(batch_size, *self.obs_shape)
+        next_obs = next_obs.reshape(batch_size, *self.obs_shape)
+        actions = actions.reshape(batch_size, -1)
+        rewards = rewards.reshape(batch_size, -1)
+        terms = terms.reshape(batch_size, -1)
         z = self.forward(obs, actions, rewards, next_obs, terms)
-        z = z.reshape(n_timesteps, batch_size, -1)
-        return z.mean(0)
+        return z
+        # return z.mean(0)

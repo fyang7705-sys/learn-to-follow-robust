@@ -37,10 +37,11 @@ class DistillationDataset(Dataset):
         }
 
 class EncodeDataset(Dataset):
-    def __init__(self, folder):
+    def __init__(self, folder, window_size):
         file_path = folder + "/*.pt"
         self.files = glob.glob(file_path)
         print(f"✅ Found {len(self.files)} data files in {folder}")
+        self.window_size = window_size
 
 
     def __len__(self):
@@ -64,25 +65,60 @@ class EncodeDataset(Dataset):
         reward = data["rewards"].to(torch.float32).unsqueeze(1)
 
         term = torch.zeros_like(reward)
-
-        label = torch.tensor(data["label"], dtype=torch.float32)
-
+        label = torch.tensor(data["label"], dtype=torch.float32).repeat(old_obs.shape[0])
+        # print("shape of label: ", label.shape)
+        # print("shape of old_obs: ", old_obs.shape)
         return {
-            "state": old_obs,        # shape: (K, 2, 11, 11)
-            "action": action,        # (K,1)
-            "reward": reward,        # (K,1)
-            "next_state": new_obs,   # (K, 2,11,11)
+            "state": old_obs,       
+            "action": action,     
+            "reward": reward,       
+            "next_state": new_obs,   
+            "term": term,
+            "label": label,
+        }
+
+class EncodeDatasetForWindow(Dataset):
+    def __init__(self, folder, window_size):
+        folder = folder + f"/{window_size}"
+        file_path = folder + "/*.pt"
+        self.files = glob.glob(file_path)
+        print(f"✅ Found {len(self.files)} data files in {folder}")
+        self.window_size = window_size
+
+    def __len__(self):   
+        return len(self.files)
+
+    def __getitem__(self, idx):
+        data = torch.load(self.files[idx])
+        obs = torch.stack([
+            torch.tensor(item["obs"], dtype=torch.float32)
+            for item in data["obs"]
+        ], dim=0)
+        action = torch.stack([
+            torch.tensor(item["action"], dtype=torch.float32)
+            for item in data["action"]
+        ], dim=0)
+        reward = torch.stack([
+            torch.tensor(item["reward"], dtype=torch.float32)
+            for item in data["reward"]
+        ], dim=0)
+        term = torch.zeros_like(reward)
+        label = torch.tensor(data["label"], dtype=torch.float32).repeat(obs.shape[0])
+        return {
+            "obs": obs,
+            "action": action,
+            "reward": reward,
             "term": term,
             "label": label,
         }
 
 def prepare_batch_for_encoder(batch):
-    old_obs   = batch["state"].permute(1, 0, 2, 3, 4)     # (K,B,C,H,W)
-    new_obs   = batch["next_state"].permute(1, 0, 2, 3, 4)     # (K,B,C,H,W)
-    actions   = batch["action"].permute(1, 0, 2)           # (K,B,A)
-    rewards   = batch["reward"].permute(1, 0, 2)           # (K,B,1)
-    terms     = batch["term"].permute(1, 0, 2)             # (K,B,1)
-    labels    = batch["label"]                             # (B,)
+    old_obs   = batch["state"]
+    new_obs   = batch["next_state"]
+    actions   = batch["action"]
+    rewards   = batch["reward"]
+    terms     = batch["term"]
+    labels    = batch["label"] 
     return old_obs, actions, rewards, new_obs, terms, labels
 
 
@@ -133,6 +169,42 @@ def collate_fn(samples):
     }
 
 
+def encode_collate_fn(samples):
+
+    keys = set()
+    for s in samples:
+        keys.update(s.keys())
+
+    batched = {}
+
+    for k in ["state", "next_state", "action", "reward", "term"]:
+        tensors = []
+        for s in samples:
+            v = s[k]
+            if not isinstance(v, torch.Tensor):
+                v = torch.tensor(v)
+            tensors.append(v)
+        batched[k] = torch.cat(tensors, dim=0)
+
+    label_list = []
+    for s in samples:
+        label_list.append(s["label"])
+
+    batched["label"] = torch.cat(label_list, dim=0)
+
+    return batched
+
+def encode_collate_fn_for_window(samples):
+    batched = {}
+    for k in ["obs", "action", "reward", "term"]:
+        tensors = []
+        for s in samples:
+            v = s[k]
+            if not isinstance(v, torch.Tensor):
+                v = torch.tensor(v)
+            tensors.append(v)
+        batched[k] = torch.cat(tensors, dim=0)
+    return batched
 
 if __name__ == "__main__":
     # dataset = DistillationDataset(
@@ -148,15 +220,24 @@ if __name__ == "__main__":
     # print("✅ rnn_states shape:", sample["rnn_states"])
     # print("✅ policy_outputs keys:", sample["policy_outputs"])
     
-    data_dir = "../encode_data/"
-    batch_files = 4
-    dataset = EncodeDataset(data_dir)
-    loader = DataLoader(dataset, batch_size=batch_files, shuffle=True, collate_fn=None)
+    # data_dir = "../encode_data/"
+    # batch_files = 4
+    # dataset = EncodeDataset(data_dir)
+    # loader = DataLoader(dataset, batch_size=batch_files, shuffle=True, collate_fn=None)
+    # sample = next(iter(loader))
+    # print("state shape:", sample["state"].shape)
+    # print("action shape:", sample["action"].shape)
+    # print("reward shape:", sample["reward"].shape)
+    # print("next_state shape:", sample["next_state"].shape)
+    # print("term shape:", sample["term"].shape)
+    # print("label shape:", sample["label"].shape)
+    window_size = 5
+    data_dir = "../encoder_data/"
+    dataset = EncodeDatasetForWindow(data_dir, window_size)
+    loader = DataLoader(dataset, batch_size=4, shuffle=True, collate_fn=encode_collate_fn_for_window)
     sample = next(iter(loader))
-    print("state shape:", sample["state"].shape)
+    print("obs shape:", sample["obs"].shape)
     print("action shape:", sample["action"].shape)
     print("reward shape:", sample["reward"].shape)
-    print("next_state shape:", sample["next_state"].shape)
     print("term shape:", sample["term"].shape)
     print("label shape:", sample["label"].shape)
-    

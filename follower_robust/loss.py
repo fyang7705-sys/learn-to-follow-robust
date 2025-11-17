@@ -17,24 +17,57 @@ def pgm_loss(student_probs, teacher_actions, eta=0.3, eps=1e-8):
     return torch.stack(batch_loss).mean()
 
 # metric loss in FOCAL
-def metric_loss(z, tasks, epsilon=1e-3):
+def metric_loss(z, tasks, beta = 1.0, n = 2,epsilon=1e-6):
     # z shape is (task, dim)
     pos_z_loss = 0.
     neg_z_loss = 0.
     pos_cnt = 0
     neg_cnt = 0
+
     for i in range(len(tasks)):
         for j in range(i+1, len(tasks)):
             # positive pair
             if tasks[i] == tasks[j]:
-                pos_z_loss += torch.sqrt(torch.mean((z[i] - z[j]) ** 2) + epsilon)
+                # pos_z_loss += torch.sqrt(torch.mean((z[i] - z[j]) ** 2) + epsilon)
+                pos_z_loss += torch.sum((z[i] - z[j]) ** 2)
                 pos_cnt += 1
             else:
-                neg_z_loss += 1/(torch.mean((z[i] - z[j]) ** 2) + epsilon * 100)
+                # neg_z_loss += 1/(torch.mean((z[i] - z[j]) ** 2) + epsilon * 100)
+                dist = torch.sqrt(torch.sum((z[i] - z[j]) ** 2) + epsilon)
+                neg_z_loss += 1 / (dist ** n + epsilon)
                 neg_cnt += 1
+    pos_z_loss = pos_z_loss / (pos_cnt + epsilon)
+    neg_z_loss = neg_z_loss / (neg_cnt + epsilon)
     #print(pos_z_loss, pos_cnt, neg_z_loss, neg_cnt)
-    return pos_z_loss/(pos_cnt + epsilon) +  neg_z_loss/(neg_cnt + epsilon)
+    return pos_z_loss, pos_cnt, neg_z_loss, neg_cnt, pos_z_loss + beta * neg_z_loss
 
+def metric_loss_fast(z, tasks, beta=1.0, n=2, epsilon=1e-6):
+    N = z.shape[0]
+
+    # ----- pairwise squared L2 distance matrix -----
+    diff = z.unsqueeze(1) - z.unsqueeze(0) # (N, N, dim)
+    dist2 = torch.sum(diff * diff, dim=2) # ||z_i - z_j||^2
+    dist = torch.sqrt(dist2 + epsilon) # ||z_i - z_j||
+
+    # ----- positive mask -----
+    task_eq = (tasks.unsqueeze(0) == tasks.unsqueeze(1)) # (N, N)
+    pos_mask = torch.triu(task_eq, diagonal=1)
+    neg_mask = torch.triu(~task_eq, diagonal=1)
+
+    # ----- positive loss -----
+    pos_dist2 = dist2[pos_mask]
+    pos_loss = pos_dist2.mean() if pos_dist2.numel() > 0 else torch.tensor(0., device=z.device)
+    pos_cnt = pos_dist2.numel()
+
+    # ----- negative loss -----
+    neg_dist = dist[neg_mask]
+    neg_loss = (1.0 / (neg_dist**n + epsilon)).mean() if neg_dist.numel() > 0 else torch.tensor(0., device=z.device)
+    neg_cnt = neg_dist.numel()
+
+    # ----- total -----
+    loss = pos_loss + beta * neg_loss
+
+    return pos_loss, pos_cnt, neg_loss, neg_cnt, loss
 
 
 def jacobian_regularization(loss_pgm, obs_tensor):
