@@ -90,20 +90,16 @@ class EncodeDatasetForWindow(Dataset):
 
     def __getitem__(self, idx):
         data = torch.load(self.files[idx])
-        obs = torch.stack([
-            torch.tensor(item["obs"], dtype=torch.float32)
-            for item in data["obs"]
-        ], dim=0)
-        action = torch.stack([
-            torch.tensor(item["action"], dtype=torch.float32)
-            for item in data["action"]
-        ], dim=0)
-        reward = torch.stack([
-            torch.tensor(item["reward"], dtype=torch.float32)
-            for item in data["reward"]
-        ], dim=0)
+        obs = data["obs"].to(torch.float32).transpose(0, 1) # [num_agents, window_size, C, H, W]
+        action = data["actions"].to(torch.float32).unsqueeze(-1).transpose(0, 1)  # [num_agents, window_size, 1]
+        reward = data["rewards"].to(torch.float32).unsqueeze(-1).transpose(0, 1)  # [num_agents, window_size, 1]
         term = torch.zeros_like(reward)
         label = torch.tensor(data["label"], dtype=torch.float32).repeat(obs.shape[0])
+        # print("obs shape:", obs.shape)
+        # print("action shape:", action.shape)
+        # print("reward shape:", reward.shape)
+        # print("term shape:", term.shape)
+        # print("label shape:", label.shape)
         return {
             "obs": obs,
             "action": action,
@@ -113,13 +109,13 @@ class EncodeDatasetForWindow(Dataset):
         }
 
 def prepare_batch_for_encoder(batch):
-    old_obs   = batch["state"]
-    new_obs   = batch["next_state"]
-    actions   = batch["action"]
-    rewards   = batch["reward"]
-    terms     = batch["term"]
-    labels    = batch["label"] 
-    return old_obs, actions, rewards, new_obs, terms, labels
+    print("keys ", batch.keys())
+    obs = batch['obs']
+    action = batch['action']
+    reward = batch['reward']
+    term = batch['term']
+    label = batch['label']
+    return obs, action, reward, term, label
 
 
 def collate_fn(samples):
@@ -196,7 +192,7 @@ def encode_collate_fn(samples):
 
 def encode_collate_fn_for_window(samples):
     batched = {}
-    for k in ["obs", "action", "reward", "term"]:
+    for k in ["obs", "action", "reward", "term", "label"]:
         tensors = []
         for s in samples:
             v = s[k]
@@ -234,10 +230,10 @@ if __name__ == "__main__":
     window_size = 5
     data_dir = "../encoder_data/"
     dataset = EncodeDatasetForWindow(data_dir, window_size)
-    loader = DataLoader(dataset, batch_size=4, shuffle=True, collate_fn=encode_collate_fn_for_window)
+    loader = DataLoader(dataset, batch_size=4, shuffle=True)
     sample = next(iter(loader))
-    print("obs shape:", sample["obs"].shape)
-    print("action shape:", sample["action"].shape)
-    print("reward shape:", sample["reward"].shape)
-    print("term shape:", sample["term"].shape)
-    print("label shape:", sample["label"].shape)
+    # print("obs shape:", sample["obs"].shape)
+    # print("action shape:", sample["action"].shape)
+    # print("reward shape:", sample["reward"].shape)
+    # print("term shape:", sample["term"].shape)
+    # print("label shape:", sample["label"].shape)

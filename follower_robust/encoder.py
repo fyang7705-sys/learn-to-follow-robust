@@ -70,42 +70,62 @@ class CNNEncoder(nn.Module):
                  reward_size=1,
                  term_size=1,
                  obs_shape=(2,11,11),
+                 window_size=5,
                  normalize=False):
         super().__init__()
         self.task_embedding_size = task_embedding_size
         self.use_termination = term_size > 0
         self.normalize = normalize
         self.obs_shape = obs_shape
+        self.window_size = window_size
 
-        # CNN feature extractor
+        C, H, W = obs_shape
+
         self.conv = nn.Sequential(
-            nn.Conv2d(obs_shape[0], 16, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(C, 16, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.Flatten()
         )
-        conv_out_size = 32 * obs_shape[1] * obs_shape[2]
+        conv_out_size = 32 * H * W
 
-        # final MLP
-        self.mlp = FlattenMlp(input_size=conv_out_size*2 + action_size + reward_size + term_size,
-                              output_size=task_embedding_size,
-                              hidden_sizes=[hidden_size])
+        mlp_input_dim = conv_out_size + action_size + reward_size + term_size
 
-    def forward(self, obs, action, reward, next_obs, term=None):
-        obs_feat = self.conv(obs)
-        next_obs_feat = self.conv(next_obs)
-        x = torch.cat([obs_feat, next_obs_feat, action, reward, term] if self.use_termination else [obs_feat, next_obs_feat, action, reward], dim=1)
-        out = self.mlp(x)
-        return F.normalize(out) if self.normalize else out
+        self.mlp = FlattenMlp(
+            input_size=mlp_input_dim,
+            output_size=task_embedding_size,
+            hidden_sizes=[hidden_size]
+        )
 
-    def context_encoding(self, obs, actions, rewards, next_obs, terms):
-        batch_size = obs.shape[0]
-        obs = obs.reshape(batch_size, *self.obs_shape)
-        next_obs = next_obs.reshape(batch_size, *self.obs_shape)
-        actions = actions.reshape(batch_size, -1)
-        rewards = rewards.reshape(batch_size, -1)
-        terms = terms.reshape(batch_size, -1)
-        z = self.forward(obs, actions, rewards, next_obs, terms)
+    def forward(self, states, actions, rewards, terms):
+
+        B, T = states.shape[0], states.shape[1]
+        C, H, W = self.obs_shape
+
+        states_flat = states.reshape(B*T, C, H, W)
+        state_feats = self.conv(states_flat)     # (B*T, conv_dim)
+        conv_dim = state_feats.shape[-1]
+        state_feats = state_feats.reshape(B, T, conv_dim)
+
+        x = torch.cat([
+            state_feats,     # (B,T,conv_dim)
+            actions,         # (B,T,A)
+            rewards,         # (B,T,1)
+            terms            # (B,T,1)
+        ], dim=-1)           # => (B,T,conv_dim + A + 1 + 1)
+
+        x = x.reshape(B*T, -1)
+        z = self.mlp(x)            # (B*T, dim)
+        z = z.reshape(B, T, -1)
+        z = z.mean(dim=1)             # (B, dim)
         return z
-        # return z.mean(0)
+
+    def context_encoding(self, states, actions, rewards, terms):
+        batch_size = states.shape[0]
+        states = states.reshape(batch_size, self.window_size, *self.obs_shape)
+        actions = actions.reshape(batch_size, self.window_size, -1)
+        rewards = rewards.reshape(batch_size, self.window_size, -1)
+        terms = terms.reshape(batch_size, self.window_size, -1)
+        z = self.forward(states, actions, rewards, terms)
+        return z

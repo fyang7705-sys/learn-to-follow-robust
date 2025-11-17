@@ -41,8 +41,7 @@ def run_episode(env, algo):
 
         obs, rew, terminated, truncated, infos = env.step(action)
         results_holder.after_step(infos)
-
-        buffer_obs.append(obs)
+        buffer_obs.append(torch.tensor([o['obs'] for o in obs]))
         buffer_actions.append(torch.tensor(action))
         buffer_rewards.append(torch.tensor(rew))
 
