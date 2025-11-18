@@ -69,9 +69,12 @@ class CNNEncoder(nn.Module):
                  action_size=1,
                  reward_size=1,
                  term_size=1,
-                 obs_shape=(2,11,11),
+                 obs_shape=(2, 11, 11),
                  window_size=5,
-                 normalize=False):
+                 normalize=False,
+                 transformer_layers=2,
+                 transformer_heads=4):
+
         super().__init__()
         self.task_embedding_size = task_embedding_size
         self.use_termination = term_size > 0
@@ -81,51 +84,72 @@ class CNNEncoder(nn.Module):
 
         C, H, W = obs_shape
 
+        # ---- CNN ----
         self.conv = nn.Sequential(
             nn.Conv2d(C, 16, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.Flatten()
+            nn.Flatten()  # result dimension = 32 * H * W
         )
-        conv_out_size = 32 * H * W
+        self.conv_out_size = 32 * H * W
 
-        mlp_input_dim = conv_out_size + action_size + reward_size + term_size
-
-        self.mlp = FlattenMlp(
-            input_size=mlp_input_dim,
-            output_size=task_embedding_size,
-            hidden_sizes=[hidden_size]
+        # ---- MLP to fuse CNN + action/reward/term ----
+        mlp_input_dim = self.conv_out_size + action_size + reward_size + term_size
+        self.frame_mlp = nn.Sequential(
+            nn.Linear(mlp_input_dim, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
         )
+
+        # ---- Transformer encoder ----
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=hidden_size,
+            nhead=transformer_heads,
+            dim_feedforward=hidden_size * 4,
+            batch_first=True,  # important: output shapes are (B,T,D)
+        )
+        self.transformer = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=transformer_layers,
+        )
+
+        # ---- final projection ----
+        self.out_linear = nn.Linear(hidden_size, task_embedding_size)
+
 
     def forward(self, states, actions, rewards, terms):
-
         B, T = states.shape[0], states.shape[1]
         C, H, W = self.obs_shape
 
+        # ----- CNN feature extraction -----
         states_flat = states.reshape(B*T, C, H, W)
-        state_feats = self.conv(states_flat)     # (B*T, conv_dim)
-        conv_dim = state_feats.shape[-1]
-        state_feats = state_feats.reshape(B, T, conv_dim)
+        state_feats = self.conv(states_flat)  # (B*T, conv_out_size)
+        state_feats = state_feats.reshape(B, T, self.conv_out_size)
 
-        x = torch.cat([
-            state_feats,     # (B,T,conv_dim)
-            actions,         # (B,T,A)
-            rewards,         # (B,T,1)
-            terms            # (B,T,1)
-        ], dim=-1)           # => (B,T,conv_dim + A + 1 + 1)
+        # ----- concat with action/reward/term -----
+        per_frame_input = torch.cat([
+            state_feats,                # (B,T,F)
+            actions,                    # (B,T,1)
+            rewards,                    # (B,T,1)
+            terms                       # (B,T,1)
+        ], dim=-1)  # shape = (B,T,F+3)
 
-        x = x.reshape(B*T, -1)
-        z = self.mlp(x)            # (B*T, dim)
-        z = z.reshape(B, T, -1)
-        z = z.mean(dim=1)             # (B, dim)
+        # ----- per-frame MLP -----
+        frame_feat = self.frame_mlp(per_frame_input)  # (B,T,H)
+
+        # ----- transformer -----
+        # key: transformer expects (B,T,H) if batch_first=True
+        trans_out = self.transformer(frame_feat)      # (B,T,H)
+
+        # ----- mean-pooling / last-token / cls-token ----
+        z = trans_out.mean(dim=1)                     # (B,H)
+
+        # ----- final projection ----
+        z = self.out_linear(z)                        # (B, task_embedding_size)
+
         return z
-
+    
     def context_encoding(self, states, actions, rewards, terms):
-        batch_size = states.shape[0]
-        states = states.reshape(batch_size, self.window_size, *self.obs_shape)
-        actions = actions.reshape(batch_size, self.window_size, -1)
-        rewards = rewards.reshape(batch_size, self.window_size, -1)
-        terms = terms.reshape(batch_size, self.window_size, -1)
         z = self.forward(states, actions, rewards, terms)
         return z

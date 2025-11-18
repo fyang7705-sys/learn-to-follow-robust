@@ -12,7 +12,7 @@ import wandb
 from sklearn.manifold import TSNE
 import numpy as np
 import matplotlib.pyplot as plt
-def log_tsne(encoder, loader, device):
+def log_tsne(encoder, loader, device, epoch):
     encoder.eval()
 
     batch = next(iter(loader))  # 取一个 batch 做可视化
@@ -39,15 +39,15 @@ def log_tsne(encoder, loader, device):
     z_2d = tsne.fit_transform(z)
     plt.scatter(z_2d[:, 0], z_2d[:, 1], c=label, cmap="viridis")
     plt.colorbar()
-    plt.savefig("robust-experiments/01-random-20x20/tsne.png")
+    plt.savefig(f"robust-experiments/01-random-20x20/tsne_epoch{epoch}.png")
     plt.close()
     # logging to wandb
-    # wandb.log({
-    #     "tsne": wandb.Table(
-    #         data=[[float(z_2d[i, 0]), float(z_2d[i, 1]), float(labels[i])] for i in range(len(z_2d))],
-    #         columns=["x", "y", "label"]
-    #     )
-    # })
+    wandb.log({
+        "tsne": wandb.Table(
+            data=[[float(z_2d[i, 0]), float(z_2d[i, 1]), float(label[i])] for i in range(len(z_2d))],
+            columns=["x", "y", "label"]
+        )
+    })
 
 
 
@@ -78,25 +78,22 @@ def train(data_dir, learning_rate, batch_size=20, epochs=20, save_path="model/fo
 
     optimizer = torch.optim.Adam(encoder.parameters(), lr=learning_rate)
 
-    # wandb.init(
-    #     project="learn-to-follow-robust",
-    #     name=f"encoder_{timestamp}",
-    #     config={
-    #         "learning_rate": learning_rate,
-    #         "epochs": epochs,
-    #         "batch_size": batch_size,
-    #         "data_dir": data_dir,
-    #         "obs_shape": (2, 11, 11),
-    #         "action_size": 1,
-    #         "reward_size": 1,
-    #         "term_size": 1,
-    #         "task_embedding_size": 32,
-    #     }
-    # )
+    wandb.init(
+        project="learn-to-follow-robust",
+        name=f"encoder_{timestamp}",
+        config={
+            "learning_rate": learning_rate,
+            "epochs": epochs,
+            "batch_size": batch_size,
+            "data_dir": data_dir,
+            "obs_shape": (2, 11, 11),
+            "action_size": 1,
+            "reward_size": 1,
+            "term_size": 1,
+            "task_embedding_size": 32,
+        }
+    )
     
-    # -------------------------
-    # Training Loop
-    # -------------------------
     for epoch in range(epochs):
         encoder.train()
         total_loss = 0
@@ -132,13 +129,13 @@ def train(data_dir, learning_rate, batch_size=20, epochs=20, save_path="model/fo
 
             total_loss += loss.item()
             progress.set_postfix({"loss": f"{loss.item():.4f}"})
-            # wandb.log({"loss": loss.item()})
-            # wandb.log({"pos_z_loss": pos_z_loss.item(), "neg_z_loss": neg_z_loss.item(), "pos_cnt": pos_cnt, "neg_cnt": neg_cnt})
+            wandb.log({"loss": loss.item()})
+            wandb.log({"pos_z_loss": pos_z_loss.item(), "neg_z_loss": neg_z_loss.item(), "pos_cnt": pos_cnt, "neg_cnt": neg_cnt})
             
         avg_loss = total_loss / len(loader)
         ToolboxRegistry.info(f"Epoch {epoch+1}: avg loss = {avg_loss:.4f}")
-        # wandb.log({"avg_loss": avg_loss, "epoch": epoch+1})
-        log_tsne(encoder, loader, device)
+        wandb.log({"avg_loss": avg_loss, "epoch": epoch+1})
+        log_tsne(encoder, loader, device, epoch)
     torch.save(encoder.state_dict(), save_path)
     ToolboxRegistry.info(f"Model saved to {save_path}")
     ToolboxRegistry.info("Training finished.")
@@ -150,8 +147,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--data_dir", type=str, default="encoder_data/")
     parser.add_argument("--learning_rate", type=float, default=1e-3)
-    parser.add_argument("--batch_size", type=int, default=20)
-    parser.add_argument("--epochs", type=int, default=20)
+    parser.add_argument("--batch_size", type=int, default=200)
+    parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--save_path", type=str, default="model/follower-robust/checkpoint/encoder")
     parser.add_argument("--window_size", type=int, default=5)
     args = parser.parse_args()

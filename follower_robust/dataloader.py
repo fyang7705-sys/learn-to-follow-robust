@@ -109,7 +109,6 @@ class EncodeDatasetForWindow(Dataset):
         }
 
 def prepare_batch_for_encoder(batch):
-    print("keys ", batch.keys())
     obs = batch['obs']
     action = batch['action']
     reward = batch['reward']
@@ -166,10 +165,6 @@ def collate_fn(samples):
 
 
 def encode_collate_fn(samples):
-
-    keys = set()
-    for s in samples:
-        keys.update(s.keys())
 
     batched = {}
 

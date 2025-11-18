@@ -41,7 +41,7 @@ def metric_loss(z, tasks, beta = 1.0, n = 2,epsilon=1e-6):
     #print(pos_z_loss, pos_cnt, neg_z_loss, neg_cnt)
     return pos_z_loss, pos_cnt, neg_z_loss, neg_cnt, pos_z_loss + beta * neg_z_loss
 
-def metric_loss_fast(z, tasks, beta=1.0, n=2, epsilon=1e-6):
+def metric_loss_fast(z, tasks, beta=1.0, n=2, epsilon=1e-7):
     N = z.shape[0]
 
     # ----- pairwise squared L2 distance matrix -----
@@ -56,16 +56,16 @@ def metric_loss_fast(z, tasks, beta=1.0, n=2, epsilon=1e-6):
 
     # ----- positive loss -----
     pos_dist2 = dist2[pos_mask]
-    pos_loss = pos_dist2.mean() if pos_dist2.numel() > 0 else torch.tensor(0., device=z.device)
+    pos_loss = torch.sqrt(pos_dist2.mean() + epsilon) if pos_dist2.numel() > 0 else torch.tensor(0., device=z.device)
     pos_cnt = pos_dist2.numel()
 
     # ----- negative loss -----
     neg_dist = dist[neg_mask]
-    neg_loss = (1.0 / (neg_dist**n + epsilon)).mean() if neg_dist.numel() > 0 else torch.tensor(0., device=z.device)
+    neg_loss = (1.0 / (neg_dist**2 + epsilon)).mean() if neg_dist.numel() > 0 else torch.tensor(0., device=z.device)
     neg_cnt = neg_dist.numel()
 
     # ----- total -----
-    loss = pos_loss + beta * neg_loss
+    loss = 100 * pos_loss + 50 * beta * neg_loss
 
     return pos_loss, pos_cnt, neg_loss, neg_cnt, loss
 

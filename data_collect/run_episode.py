@@ -18,7 +18,7 @@ def bug_action(action_outputs, bug_prob):
 
 WINDOW_SIZE = 5  
 
-def run_episode(env, algo):
+def collect_data(env, algo):
     global prob_index
     bug_prob = bug_probs[prob_index]
     algo.reset_states()

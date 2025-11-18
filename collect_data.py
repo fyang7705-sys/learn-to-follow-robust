@@ -13,7 +13,7 @@ from pogema_toolbox.registry import ToolboxRegistry
 from follower.inference import FollowerInference, FollowerInferenceConfig
 from follower.preprocessing import follower_preprocessor
 
-from data_collect.run_episode import run_episode as collect_data
+from data_collect.run_episode import  collect_data
 
 PROJECT_NAME = 'pogema-toolbox'
 BASE_PATH = Path('robust-experiments')
