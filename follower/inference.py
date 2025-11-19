@@ -1,6 +1,6 @@
 from pogema_toolbox.algorithm_config import AlgoBase
 
-from follower.preprocessing import PreprocessorConfig
+# from follower.preprocessing import PreprocessorConfig
 # noinspection PyUnresolvedReferences
 
 import json
@@ -58,7 +58,7 @@ class FollowerInferenceConfig(AlgoBase, extra=Extra.forbid):
     name: Literal['Follower'] = 'Follower'
 
     path_to_weights: str = "model/follower"
-    preprocessing: PreprocessorConfig = PreprocessorConfig()
+    # preprocessing: PreprocessorConfig = PreprocessorConfig()
     override_config: Optional[dict] = None
     training_config: Optional[Experiment] = None
     custom_path_to_weights: Optional[str] = None

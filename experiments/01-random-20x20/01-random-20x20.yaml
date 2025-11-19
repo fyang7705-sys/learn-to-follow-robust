@@ -30,7 +30,7 @@ algorithms:
   Follower:
     name: Follower
     num_process: 16
-    parallel_backend: 'balanced_dask'
+    parallel_backend: 'sequential'
     # custom_path_to_weight: model/follower
   
   # FollowerRobust:

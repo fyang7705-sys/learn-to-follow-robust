@@ -2,13 +2,46 @@ import numpy as np
 import gymnasium
 from gymnasium import ObservationWrapper
 from gymnasium.spaces import Box, Dict
+import torch
+from pydantic import BaseModel
 
 from follower.planning import ResettablePlanner, PlannerConfig
+from follower_robust.encoder import CNNEncoder
+from typing import List
+
+class InferenceNetConfig(BaseModel):
+    weight_path: str
+    hidden_size: int
+    task_embedding_size: int
+    action_size: int
+    reward_size: int
+    term_size: int
+    obs_shape: List[int]
+    window_size: int
+    normalize: bool
+    transformer_layers: int
+    transformer_heads: int
 
 
 class PreprocessorConfig(PlannerConfig):
     network_input_radius: int = 5
     intrinsic_target_reward: float = 0.01
+    use_latent_embedding: bool = True
+    inference_windowsize: int = 5
+    inference_net: InferenceNetConfig = InferenceNetConfig(
+        weight_path="model/follower-robust/checkpoint/encoder/encoder_20251118_065830_762916.pt",
+        hidden_size=64,
+        task_embedding_size=32,
+        action_size=1,
+        reward_size=1,
+        term_size=1,
+        obs_shape=[2, 11, 11],
+        window_size=5,
+        normalize=False,
+        transformer_layers=2,
+        transformer_heads=4,
+    )
+
 
 
 def follower_preprocessor(env, algo_config):
@@ -17,10 +50,12 @@ def follower_preprocessor(env, algo_config):
 
 
 def wrap_preprocessors(env, config: PreprocessorConfig, auto_reset=False):
+    
     env = FollowerWrapper(env=env, config=config)
     env = CutObservationWrapper(env, target_observation_radius=config.network_input_radius)
     env = ConcatPositionalFeatures(env)
-    # env = EncodeDataCollectionWrapper(env)
+    if config.use_latent_embedding:
+        env = EncodeDataCollectionWrapper(env, config=config)
     if auto_reset:
         env = AutoResetWrapper(env)
     return env
@@ -174,16 +209,38 @@ class ConcatPositionalFeatures(ObservationWrapper):
 
 
 class EncodeDataCollectionWrapper(ObservationWrapper):
-    def observation(self, observations):
-        for agent_idx, obs in enumerate(observations):
-            for key in obs:
-                if key != 'id':
-                    obs[key] = np.array(obs[key], dtype=np.float32)
-        return observations
-    
+    def __init__(self, env, config):
+        super().__init__(env)
+        self.obs_buffer = []
+        self.reward_buffer = []
+        self.action_buffer = []
+        self.terminal_buffer = []
+        self.window_size = config.inference_windowsize
+        self.inference_net = CNNEncoder()
+        inference_net_state_dict = torch.load(config.inference_net.weight_path, map_location = torch.device('cpu'))
+        self.inference_net.load_state_dict(inference_net_state_dict)
     def step(self, action):
         observations, reward, terminated, truncated, info = self.env.step(action)
-        return self.observation(observations), reward, terminated, truncated, info
+        self.obs_buffer.append(observations['obs'])
+        self.reward_buffer.append(reward)
+        self.action_buffer.append(action)
+        self.terminal_buffer.append(0) # 训练encoder的时候默认terminal为0
+        if len(self.obs_buffer) > self.window_size:
+            self.obs_buffer.pop(0)
+            self.reward_buffer.pop(0)
+            self.action_buffer.pop(0)
+            self.terminal_buffer.pop(0)
+        if len(self.obs_buffer) == self.window_size:
+            obs_t = torch.stack(self.obs_buffer).transpose(0, 1) # [agent, window_size, C, H, W]
+            reward_t = torch.tensor(self.reward_buffer).transpose(0, 1) # [agent, window_size, 1]
+            action_t = torch.tensor(self.action_buffer).transpose(0, 1) # [agent, window_size, 1]
+            terminal_t = torch.tensor(self.terminal_buffer).transpose(0, 1) # [agent, window_size, 1]
+            with torch.no_grad():
+                z = self.inference_net(obs_t, action_t, reward_t, terminal_t)
+                z = torch.mean(z, dim = 0)
+                z = z.detach().cpu().numpy()
+                observations['latent'] = z
+        return observations, reward, terminated, truncated, info
 
 class AutoResetWrapper(gymnasium.Wrapper):
     def step(self, action):

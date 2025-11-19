@@ -192,8 +192,23 @@
     "use_dynamic_cost": true,
     "use_static_cost": true,
     "reset_dynamic_cost": true,
+    "use_latent_embedding": true,
     "network_input_radius": 5,
-    "intrinsic_target_reward": 0.01
+    "intrinsic_target_reward": 0.01,
+    "inference_windowsize": 5,
+    "inference_net": {
+      "weight_path": "model/follower-robust/checkpoint/encoder/encoder_20251118_065830_762916.pt",
+      "hidden_size": 64,
+      "task_embedding_size": 32,
+      "action_size": 1,
+      "reward_size": 1,
+      "term_size": 1,
+      "obs_shape": [2, 11, 11],
+      "window_size": 5,
+      "normalize": false,
+      "transformer_layers": 2,
+      "transformer_heads": 4
+    }
   },
   "use_wandb": true,
   "command_line": "--env=PogemaMazes-v0",

@@ -5,9 +5,9 @@ from sample_factory.utils.typing import ActionSpace, Config, ObsSpace
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.algo.utils.context import global_model_factory
 
-from follower.training_config import Experiment
-from follower.register_env import register_custom_components
-from follower.register_training_utils import register_custom_model
+# from follower.training_config import Experiment
+# from follower.register_env import register_custom_components
+# from follower.register_training_utils import register_custom_model
 
 from argparse import Namespace
 

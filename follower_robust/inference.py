@@ -10,10 +10,6 @@ from copy import deepcopy
 from follower.training_config import Experiment
 from follower.register_env import register_custom_components
 
-from follower_robust.model import DistilledActor, make_student_model
-
-import glob
-
 import os
 from argparse import Namespace
 from collections import OrderedDict
@@ -21,7 +17,6 @@ from os.path import join
 
 import numpy as np
 
-from typing import Optional
 
 try:
     from typing import Literal
@@ -30,15 +25,14 @@ except ImportError:
 
 import torch
 from sample_factory.utils.utils import log
-from pydantic import Extra, validator
+from pydantic import Extra
 
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.model.model_utils import get_rnn_size
 from sample_factory.algo.utils.make_env import make_env_func_batched
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
-from sample_factory.algo.utils.context import global_model_factory
-
+from sample_factory.model.actor_critic import create_actor_critic
 # from follower.algorithm_utils import AlgoBase
 
 from follower.register_training_utils import register_custom_model
@@ -49,15 +43,16 @@ class FollowerConfigRobust(FollowerInferenceConfig, extra=Extra.forbid):
     name: Literal['FollowerRobust'] = 'FollowerRobust'
     num_process: int = 8
     num_threads: int = 8
-    path_to_weights: str = "model/follower-robust/"
+    path_to_weights: str = "model/follower-robust"
     preprocessing: PreprocessorConfig = PreprocessorConfig()
-
-
 class FollowerInferenceRobust:
+
+
     def __init__(self, config):
-        self.algo_cfg: FollowerConfigRobust = config
+        self.algo_cfg: FollowerInferenceConfig = config
         device = config.device
 
+        register_custom_model()
         self.path = config.path_to_weights
 
         
@@ -65,6 +60,8 @@ class FollowerInferenceRobust:
             flat_config = json.load(f)
             self.exp = Experiment(**flat_config)
             flat_config = Namespace(**flat_config)
+        env_name = self.exp.environment.env
+        register_custom_components(env_name)
         config = flat_config
 
         config.num_envs = 1
@@ -72,17 +69,13 @@ class FollowerInferenceRobust:
         if self.save_json:
             self.save_dir = config.save_dir
             Path(config.save_dir).mkdir(parents=True, exist_ok=True)
-        student = make_student_model(self.path)
-    #     model_factory = global_model_factory()
-
-    #     student = DistilledActor(
-    #     model_factory=model_factory,  # uses default factory inside
-    #     obs_space=env.observation_space,  # sample obs space
-    #     action_space=env.action_space,  # will be inferred from data
-    #     cfg=config  # default config
-    # )
-        # actor_critic = create_actor_critic(config, env.observation_space, env.action_space)
-        student.eval()
+        env = make_env_func_batched(config, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
+        # print(f"config: {config}\n")
+        # print(f"env.observation_space: {env.observation_space}\n")
+        # print(f"env.action_space{env.action_space}\n")
+        actor_critic = create_actor_critic(config, env.observation_space, env.action_space)
+        actor_critic.eval()
+        env.close()
 
         if device != 'cpu' and not torch.cuda.is_available():
             os.environ['OMP_NUM_THREADS'] = str(1)
@@ -92,25 +85,26 @@ class FollowerInferenceRobust:
             torch.set_num_interop_threads(1)
             log.warning('CUDA is not available, using CPU. This might be slow.')
 
-        student.model_to_device(device)
+        actor_critic.model_to_device(device)
+        name_prefix = dict(latest="checkpoint", best="best")['latest']
+        policy_index = 0 if 'policy_index' not in flat_config else flat_config.policy_index
+
+        checkpoints = Learner.get_checkpoints(os.path.join(self.path, f"checkpoint_p{policy_index}"),
+                                              f"{name_prefix}_*")
+
         if self.algo_cfg.custom_path_to_weights:
-            checkpoints = self.algo_cfg.custom_path_to_weights
-        else:
-            paths = glob.glob(os.path.join(self.path, "checkpoint/student*.pt"))
-            if len(paths) == 0:
-                raise FileNotFoundError(f"No checkpoint found in {self.path}/checkpoint/")
-            checkpoints = sorted(paths)[-1] 
+            checkpoints = [self.algo_cfg.custom_path_to_weights]
 
-        log.info(f'Loading weights from {checkpoints}')
-        state_dict = torch.load(checkpoints, map_location=device, weights_only=True) 
-        student.load_state_dict(state_dict)
+        checkpoint_dict = Learner.load_checkpoint(checkpoints, device)
+        actor_critic.load_state_dict(checkpoint_dict['model'])
+        log.info(f'Loaded {str(checkpoints)}')
 
-        self.net = student
+        self.net = actor_critic
         self.device = device
         self.cfg = config
 
         self.rnn_states = None
-        self.observations = None 
+        self.observations = None # 用于给学生策略传递观测
 
     def collect_data(self, normalized_obs, rnn_states, policy_outputs):
         os.makedirs(self.save_dir, exist_ok=True)
@@ -196,3 +190,4 @@ class FollowerInferenceRobust:
         torch.onnx.export(self.net, ({'obs': obs_example}, rnn_example), filename,
                           input_names=input_names, output_names=output_names,
                           export_params=True)
+

@@ -17,7 +17,7 @@ from follower_cpp.inference import FollowerConfigCPP, FollowerInferenceCPP
 from follower_cpp.preprocessing import follower_cpp_preprocessor
 from follower_robust.inference import FollowerConfigRobust, FollowerInferenceRobust
 PROJECT_NAME = 'pogema-toolbox'
-BASE_PATH = Path('experiments')
+BASE_PATH = Path('robust-experiments')
 
 
 def main(disable_wandb=True):

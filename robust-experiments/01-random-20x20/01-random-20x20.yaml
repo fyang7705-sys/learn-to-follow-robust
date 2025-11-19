@@ -26,18 +26,18 @@ environment:
   seed:
     grid_search: [2, 3]
 algorithms:
-  Follower:
-    name: Follower
-    num_process: 8
-    parallel_backend: 'balanced_dask'
-    run_episode_func: 'collect_data'
+  # Follower:
+  #   name: Follower
+  #   num_process: 8
+  #   parallel_backend: 'balanced_dask'
+  #   run_episode_func: 'collect_data'
     # custom_path_to_weight: model/follower
   
-  # FollowerRobust:
-  #   name: FollowerRobust
-  #   num_process: 4
-  #   parallel_backend: 'balanced_dask'
-  
+  FollowerRobust:
+    name: FollowerRobust
+    num_process: 8
+    parallel_backend: 'sequential'
+
   # FollowerLite:
   #   name: FollowerLite
   #   num_process: 4

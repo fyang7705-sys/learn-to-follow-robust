@@ -10,7 +10,7 @@ from sample_factory.algo.utils.torch_utils import calc_num_elements
 from sample_factory.utils.utils import log
 
 from torch import nn as nn
-
+from follower.preprocessing import PreprocessorConfig
 
 class EncoderConfig(BaseModel):
     """
@@ -94,13 +94,13 @@ class ResnetEncoder(Encoder):
     def __init__(self, cfg: Config, obs_space: ObsSpace):
         super().__init__(cfg)
         self.encoder_cfg: EncoderConfig = EncoderConfig(**cfg.encoder)
-
+        self.preprocess_cfg: PreprocessorConfig = PreprocessorConfig(**cfg.preprocessing)
         input_ch = obs_space['obs'].shape[0]
         resnet_conf = [[self.encoder_cfg.num_filters, self.encoder_cfg.num_res_blocks]]
         curr_input_channels = input_ch
         layers = []
 
-        for out_channels, res_blocks in resnet_conf: # resnet coef似乎只有一个元素？
+        for out_channels, res_blocks in resnet_conf:
             layers.extend([nn.Conv2d(curr_input_channels, out_channels, kernel_size=3, stride=1, padding=1)])
             layers.extend([ResBlock(self.encoder_cfg, out_channels, out_channels) for _ in range(res_blocks)])
             curr_input_channels = out_channels
@@ -116,6 +116,12 @@ class ResnetEncoder(Encoder):
                 activation_func(self.encoder_cfg),
             )
             self.encoder_out_size = self.encoder_cfg.hidden_size
+        if self.preprocess_cfg.use_latent_embedding:
+            self.encoder_out_size += self.preprocess_cfg.inference_net.task_embedding_size
+            self.extra_linear = nn.Sequential(
+                nn.Linear(self.encoder_out_size, self.encoder_cfg.hidden_size),
+                activation_func(self.encoder_cfg),
+            )
 
         log.debug('Convolutional layer output size: %r', self.conv_head_out_size)
 
@@ -123,11 +129,15 @@ class ResnetEncoder(Encoder):
         return self.encoder_out_size
 
     def forward(self, x):
+        z = x['latent']
         x = x['obs']
         x = self.conv_head(x)
         x = x.contiguous().view(-1, self.conv_head_out_size)
 
-        if self.encoder_cfg.extra_fc_layers:
+        if self.preprocess_cfg.use_latent_embedding:
+            x = torch.cat([x, z], dim=-1)
+            x = self.extra_linear(x)
+        elif self.encoder_cfg.extra_fc_layers:
             x = self.extra_linear(x)
 
         return x
