@@ -165,3 +165,6 @@ wandb/
 # data
 teacher_data/
 encoder_data/
+
+# experiment
+experiment/train_dir/
