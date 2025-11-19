@@ -167,4 +167,4 @@ teacher_data/
 encoder_data/
 
 # experiment
-experiment/train_dir/
+experiments/train_dir/
