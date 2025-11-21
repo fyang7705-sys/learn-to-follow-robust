@@ -93,6 +93,7 @@ class FollowerInferenceRobust:
                                               f"{name_prefix}_*")
 
         if self.algo_cfg.custom_path_to_weights:
+            log.info(f"custom_path_to_weights:{self.algo_cfg.custom_path_to_weights}")
             checkpoints = [self.algo_cfg.custom_path_to_weights]
 
         checkpoint_dict = Learner.load_checkpoint(checkpoints, device)

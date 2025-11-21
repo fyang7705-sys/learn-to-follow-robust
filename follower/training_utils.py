@@ -63,8 +63,8 @@ def run(config=None):
 
     log.info(flat_config)
 
-    if exp.train_for_env_steps == 1_000_000:
-        exp.use_wandb = False
+    # if exp.train_for_env_steps == 1_000_000:
+    #     exp.use_wandb = False   
 
     if exp.use_wandb:
         import os

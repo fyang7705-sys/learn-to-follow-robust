@@ -1,6 +1,6 @@
 import numpy as np
 import gymnasium
-from gymnasium import ObservationWrapper
+from gymnasium import ObservationWrapper, ActionWrapper
 from gymnasium.spaces import Box, Dict
 import torch
 from pydantic import BaseModel
@@ -41,6 +41,7 @@ class PreprocessorConfig(PlannerConfig):
         transformer_layers=2,
         transformer_heads=4,
     )
+    bug_probs: List[float] = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
 
 
@@ -56,6 +57,7 @@ def wrap_preprocessors(env, config: PreprocessorConfig, auto_reset=False):
     env = ConcatPositionalFeatures(env)
     if config.use_latent_embedding:
         env = EncodeDataCollectionWrapper(env, config=config)
+        env = BugActionWrapper(env, config=config)
     if auto_reset:
         env = AutoResetWrapper(env)
     return env
@@ -219,28 +221,110 @@ class EncodeDataCollectionWrapper(ObservationWrapper):
         self.inference_net = CNNEncoder()
         inference_net_state_dict = torch.load(config.inference_net.weight_path, map_location = torch.device('cpu'))
         self.inference_net.load_state_dict(inference_net_state_dict)
+        self.inference_net.eval()
+        self.env.observation_space['latent'] = Box(low=-np.inf, high=np.inf, shape=(config.inference_net.task_embedding_size,), dtype=np.float32,)
+        
     def step(self, action):
         observations, reward, terminated, truncated, info = self.env.step(action)
-        self.obs_buffer.append(observations['obs'])
-        self.reward_buffer.append(reward)
-        self.action_buffer.append(action)
-        self.terminal_buffer.append(0) # 训练encoder的时候默认terminal为0
+
+        # convert obs list to tensor (B, C, H, W)
+        obs_tensor = torch.tensor(
+            np.stack([o['obs'] for o in observations]),
+            dtype=torch.float32
+        )
+
+        # convert action / reward to (B,1) tensor
+        action_tensor = torch.tensor(action, dtype=torch.float32).unsqueeze(-1)
+        reward_tensor = torch.tensor(reward, dtype=torch.float32).unsqueeze(-1)
+        terminal_tensor = torch.zeros_like(reward_tensor)  # always 0 for inference
+
+        # push to buffers
+        self.obs_buffer.append(obs_tensor)
+        self.reward_buffer.append(reward_tensor)
+        self.action_buffer.append(action_tensor)
+        self.terminal_buffer.append(terminal_tensor)
+
+        # maintain window size
         if len(self.obs_buffer) > self.window_size:
             self.obs_buffer.pop(0)
             self.reward_buffer.pop(0)
             self.action_buffer.pop(0)
             self.terminal_buffer.pop(0)
-        if len(self.obs_buffer) == self.window_size:
-            obs_t = torch.stack(self.obs_buffer).transpose(0, 1) # [agent, window_size, C, H, W]
-            reward_t = torch.tensor(self.reward_buffer).transpose(0, 1) # [agent, window_size, 1]
-            action_t = torch.tensor(self.action_buffer).transpose(0, 1) # [agent, window_size, 1]
-            terminal_t = torch.tensor(self.terminal_buffer).transpose(0, 1) # [agent, window_size, 1]
+        # print("reward", reward)
+        return self.observation(observations), reward, terminated, truncated, info
+    
+    def observation(self, observations):
+        if len(self.obs_buffer) > 0:
+            if len(self.obs_buffer) == self.window_size:
+
+                # stack to shapes:
+                # obs:     (T, B, C, H, W) -> (B, T, C, H, W)
+                # others:  (T, B, 1)       -> (B, T, 1)
+                obs_t = torch.stack(self.obs_buffer, dim=0).transpose(0, 1)
+                act_t = torch.stack(self.action_buffer, dim=0).transpose(0, 1)
+                rew_t = torch.stack(self.reward_buffer, dim=0).transpose(0, 1)
+                term_t = torch.stack(self.terminal_buffer, dim=0).transpose(0, 1)
+                
+            else:
+                current_T = len(self.obs_buffer)
+                pad_len = self.window_size - current_T
+
+                # 复制第 0 帧进行 padding
+                obs_pad = [self.obs_buffer[0]] * pad_len + self.obs_buffer
+                act_pad = [self.action_buffer[0]] * pad_len + self.action_buffer
+                rew_pad = [self.reward_buffer[0]] * pad_len + self.reward_buffer
+                term_pad = [self.terminal_buffer[0]] * pad_len + self.terminal_buffer
+                
+                obs_t = torch.stack(obs_pad, dim=0).transpose(0,1)
+                act_t = torch.stack(act_pad, dim=0).transpose(0,1)
+                rew_t = torch.stack(rew_pad, dim=0).transpose(0,1)
+                term_t = torch.stack(term_pad, dim=0).transpose(0,1)
+
             with torch.no_grad():
-                z = self.inference_net(obs_t, action_t, reward_t, terminal_t)
-                z = torch.mean(z, dim = 0)
-                z = z.detach().cpu().numpy()
-                observations['latent'] = z
-        return observations, reward, terminated, truncated, info
+                z = self.inference_net(obs_t, act_t, rew_t, term_t)
+                z = z.cpu().numpy()  # (B, embedding_size)
+
+            # put into observations
+            for i in range(len(observations)):
+                observations[i]['latent'] = z[i]
+        else:
+            for i in range(len(observations)):
+                observations[i]['latent'] = np.zeros((self.inference_net.task_embedding_size,))
+        return observations
+    
+    def reset(self, **kwargs):
+        self.obs_buffer = []
+        self.reward_buffer = []
+        self.action_buffer = []
+        self.terminal_buffer = []
+
+        obs, info = self.env.reset(**kwargs)
+        return self.observation(obs), info
+
+
+class BugActionWrapper(ActionWrapper):
+    def __init__(self, env, config):
+        super().__init__(env)
+        self.bug_probs = config.bug_probs
+        self.bug_prob = 0.0
+        self.episode = 0
+    def bug_action(self, action_outputs, bug_prob):
+        # print("action", action_outputs)
+        action_outputs = np.array(action_outputs, dtype=np.int64)
+        random_values = np.random.random(len(action_outputs))
+        action_outputs[random_values < bug_prob] = 0
+        # print("giao")
+        return action_outputs.tolist()
+    def action(self, action) :
+        return self.bug_action(action, self.bug_prob)
+    
+    def reset(self, **kwargs):
+        observations, infos = self.env.reset(**kwargs)
+        self.bug_prob = self.bug_probs[(self.episode) % (len(self.bug_probs) * 100) //  100]
+        self.episode += 1
+        return observations, infos
+    
+    
 
 class AutoResetWrapper(gymnasium.Wrapper):
     def step(self, action):
@@ -248,3 +332,5 @@ class AutoResetWrapper(gymnasium.Wrapper):
         if all(terminated) or all(truncated):
             observations, _ = self.env.reset()
         return observations, rewards, terminated, truncated, infos
+
+

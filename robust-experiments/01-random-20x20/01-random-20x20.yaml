@@ -24,7 +24,7 @@ environment:
   num_agents:
     grid_search: [ 8, 16, 32, 64 ]
   seed:
-    grid_search: [2, 3]
+    grid_search: [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 ]
 algorithms:
   # Follower:
   #   name: Follower
@@ -37,7 +37,7 @@ algorithms:
     name: FollowerRobust
     num_process: 8
     parallel_backend: 'sequential'
-
+    custom_path_to_weights: "experiments/train_dir/exp/checkpoint_p0/checkpoint_000019440_318504960.pth"
   # FollowerLite:
   #   name: FollowerLite
   #   num_process: 4

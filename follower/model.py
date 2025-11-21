@@ -109,22 +109,27 @@ class ResnetEncoder(Encoder):
         self.conv_head = nn.Sequential(*layers)
         self.conv_head_out_size = calc_num_elements(self.conv_head, obs_space['obs'].shape)
         self.encoder_out_size = self.conv_head_out_size
-
-        if self.encoder_cfg.extra_fc_layers:
+        # log.debug('encoder_out_size: %r' + '='*100, self.encoder_out_size)
+        
+        if self.preprocess_cfg.use_latent_embedding:
+            # log.error('encoder_out_sizeeeeee: %r' + '='*100, self.encoder_out_size)
+            self.encoder_out_size += self.preprocess_cfg.inference_net.task_embedding_size
+            # log.error('encoder_out_size: %r' + '='*100, self.encoder_out_size)
             self.extra_linear = nn.Sequential(
                 nn.Linear(self.encoder_out_size, self.encoder_cfg.hidden_size),
                 activation_func(self.encoder_cfg),
             )
             self.encoder_out_size = self.encoder_cfg.hidden_size
-        if self.preprocess_cfg.use_latent_embedding:
-            self.encoder_out_size += self.preprocess_cfg.inference_net.task_embedding_size
+        elif self.encoder_cfg.extra_fc_layers:
             self.extra_linear = nn.Sequential(
                 nn.Linear(self.encoder_out_size, self.encoder_cfg.hidden_size),
                 activation_func(self.encoder_cfg),
             )
+            self.encoder_out_size = self.encoder_cfg.hidden_size
+        # print("preprocess_cfg.use_latent_embedding" + "="*50, self.preprocess_cfg.use_latent_embedding)
 
         log.debug('Convolutional layer output size: %r', self.conv_head_out_size)
-
+        
     def get_out_size(self) -> int:
         return self.encoder_out_size
 
@@ -139,7 +144,7 @@ class ResnetEncoder(Encoder):
             x = self.extra_linear(x)
         elif self.encoder_cfg.extra_fc_layers:
             x = self.extra_linear(x)
-
+        # print("x.shape", x.shape)
         return x
 
 

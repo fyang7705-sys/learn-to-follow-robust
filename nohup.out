@@ -1,0 +1,100 @@
+Traceback (most recent call last):
+  File "<frozen importlib._bootstrap>", line 986, in _find_and_load
+KeyboardInterrupt
+[36m[2025-11-20 07:53:18,827][51865] register_encoder_factory: <function make_custom_encoder at 0x7f410c213c10>[0m
+[36m[2025-11-20 07:53:18,829][51865] env_name = PogemaMazes-v0[0m
+[37m[1m[2025-11-20 07:53:18,829][51865] Namespace(async_rl=False, batch_size=16384, decoder_mlp_layers=[], encoder={'extra_fc_layers': 1, 'num_filters': 64, 'num_res_blocks': 8, 'activation_func': 'ReLU', 'hidden_size': 512}, env='PogemaMazes-v0', environment={'grid_config': {'MOVES': [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]], 'FREE': 0, 'OBSTACLE': 1, 'empty_outside': True, 'on_target': 'restart', 'seed': None, 'size': 8, 'density': 0.3, 'num_agents': 64, 'obs_radius': 5, 'agents_xy': None, 'targets_xy': None, 'possible_agents_xy': None, 'possible_targets_xy': None, 'collision_system': 'soft', 'persistent': False, 'observation_type': 'POMAPF', 'map': None, 'map_name': 'mazes-.+', 'integration': 'SampleFactory', 'max_episode_steps': 512, 'auto_reset': 0}, 'env': 'PogemaMazes-v0', 'with_animation': False, 'worker_index': None, 'vector_index': None, 'env_id': None, 'target_num_agents': 256, 'agent_bins': [128, 256, 256, 256], 'use_maps': True, 'every_step_metrics': False}, experiment='exp', exploration_loss_coeff=0.023, force_envs_single_thread=True, gamma=0.9756, keep_checkpoints=1, learning_rate=0.00022, lr_schedule='constant', max_policy_lag=1, normalize_input=False, normalize_returns=False, num_batches_per_epoch=16, num_batches_to_accumulate=1, num_envs_per_worker=4, num_workers=8, optimizer='adam', ppo_clip_ratio=0.2, preprocessing={'use_static_cost': True, 'use_dynamic_cost': True, 'reset_dynamic_cost': True, 'network_input_radius': 5, 'intrinsic_target_reward': 0.01, 'use_latent_embedding': True, 'inference_windowsize': 5, 'inference_net': {'weight_path': 'model/follower-robust/checkpoint/encoder/encoder_20251118_065830_762916.pt', 'hidden_size': 64, 'task_embedding_size': 32, 'action_size': 1, 'reward_size': 1, 'term_size': 1, 'obs_shape': [2, 11, 11], 'window_size': 5, 'normalize': False, 'transformer_layers': 2, 'transformer_heads': 4}, 'bug_probs': [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]}, recurrence=8, restart_behavior='overwrite', rnn_size=256, rollout=8, save_best_metric='avg_throughput', save_milestones_sec=-1, seed=42, stats_avg=10, train_dir='experiments/train_dir', train_for_env_steps=1000000000, use_rnn=True, use_wandb=True, value_bootstrap=True, worker_num_splits=1)[0m
+wandb: Currently logged in as: fyang7705 (fyang7705-). Use `wandb login --relogin` to force relogin
+wandb: - Waiting for wandb.init()...wandb: \ Waiting for wandb.init()...wandb: wandb version 0.23.0 is available!  To upgrade, please run:
+wandb:  $ pip install wandb --upgrade
+wandb: Tracking run with wandb version 0.13.4
+wandb: Run data is saved locally in /home/learn-to-follow-robust/wandb/run-20251120_075323-21sqxgpa
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run fallen-salad-10
+wandb: ⭐️ View project at https://wandb.ai/fyang7705-/Learn-to-Follow
+wandb: 🚀 View run at https://wandb.ai/fyang7705-/Learn-to-Follow/runs/21sqxgpa
+[36m[2025-11-20 07:53:24,769][51865] Experiment dir experiments/train_dir/exp already exists![0m
+[36m[2025-11-20 07:53:24,770][51865] Overwriting the existing experiment dir experiments/train_dir/exp...[0m
+[36m[2025-11-20 07:53:24,780][51865] Starting training in experiments/train_dir/exp...[0m
+[36m[2025-11-20 07:53:24,780][51865] Weights and Biases integration disabled[0m
+[36m[2025-11-20 07:53:26,227][51865] Queried available GPUs: 0
+[0m
+[37m[1m[2025-11-20 07:53:26,229][51865] Environment var CUDA_VISIBLE_DEVICES is 0
+[0m
+Updated actor_critic_share_weights to True
+Updated batch_size to 16384
+Updated env to PogemaMazes-v0
+Updated exploration_loss_coeff to 0.023
+Updated extra_fc_layers to 1
+Updated gamma to 0.9756
+Updated hidden_size to 512
+Updated intrinsic_target_reward to 0.01
+Updated learning_rate to 0.00022
+Updated lr_schedule to constant
+Updated network_input_radius to 5
+Updated num_filters to 64
+Updated num_res_blocks to 8
+Updated num_workers to 8
+Updated optimizer to adam
+Updated ppo_clip_ratio to 0.2
+Updated train_for_env_steps to 1000000000
+Updated use_rnn to True
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/usr/lib/python3.8/multiprocessing/spawn.py", line 116, in spawn_main
+    exitcode = _main(fd, parent_sentinel)
+  File "/usr/lib/python3.8/multiprocessing/spawn.py", line 125, in _main
+    prepare(preparation_data)
+  File "/usr/lib/python3.8/multiprocessing/spawn.py", line 236, in prepare
+    _fixup_main_from_path(data['init_main_from_path'])
+  File "/usr/lib/python3.8/multiprocessing/spawn.py", line 287, in _fixup_main_from_path
+    main_content = runpy.run_path(main_path,
+  File "/usr/lib/python3.8/runpy.py", line 265, in run_path
+    return _run_module_code(code, init_globals, run_name,
+  File "/usr/lib/python3.8/runpy.py", line 97, in _run_module_code
+    _run_code(code, mod_globals, init_globals,
+  File "/usr/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/home/learn-to-follow-robust/main.py", line 3, in <module>
+    from follower.training_config import Experiment
+  File "/home/learn-to-follow-robust/follower/training_config.py", line 1, in <module>
+    from typing import Optional, Union
+  File "/usr/local/lib/python3.8/dist-packages/cv2/typing/__init__.py", line 61, in <module>
+    import cv2.mat_wrapper
+ModuleNotFoundError: No module named 'cv2.mat_wrapper'; 'cv2' is not a package
+wandb: Waiting for W&B process to finish... (failed 255). Press Control-C to abort syncing.
+Traceback (most recent call last):
+  File "main.py", line 52, in <module>
+    main()
+  File "main.py", line 48, in main
+    run(config=experiment)
+  File "/home/learn-to-follow-robust/follower/training_utils.py", line 78, in run
+    status = runner.init()
+  File "/usr/local/lib/python3.8/dist-packages/sample_factory/algo/runners/runner_parallel.py", line 21, in init
+    status = super().init()
+  File "/usr/local/lib/python3.8/dist-packages/sample_factory/algo/runners/runner.py", line 542, in init
+    self.env_info = obtain_env_info_in_a_separate_process(self.cfg)
+  File "/usr/local/lib/python3.8/dist-packages/sample_factory/algo/utils/env_info.py", line 127, in obtain_env_info_in_a_separate_process
+    env_info = q.get()
+  File "/usr/lib/python3.8/multiprocessing/queues.py", line 97, in get
+    res = self._recv_bytes()
+  File "/usr/lib/python3.8/multiprocessing/connection.py", line 216, in recv_bytes
+    buf = self._recv_bytes(maxlength)
+  File "/usr/lib/python3.8/multiprocessing/connection.py", line 414, in _recv_bytes
+    buf = self._recv(4)
+  File "/usr/lib/python3.8/multiprocessing/connection.py", line 379, in _recv
+    chunk = read(handle, remaining)
+KeyboardInterrupt
+Error in atexit._run_exitfuncs:
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.8/dist-packages/wandb/sdk/wandb_manager.py", line 148, in _teardown
+    result = self._service.join()
+  File "/usr/local/lib/python3.8/dist-packages/wandb/sdk/service/service.py", line 129, in join
+    ret = self._internal_proc.wait()
+  File "/usr/lib/python3.8/subprocess.py", line 1083, in wait
+    return self._wait(timeout=timeout)
+  File "/usr/lib/python3.8/subprocess.py", line 1806, in _wait
+    (pid, sts) = self._try_wait(0)
+  File "/usr/lib/python3.8/subprocess.py", line 1764, in _try_wait
+    (pid, sts) = os.waitpid(self.pid, wait_flags)
+KeyboardInterrupt

@@ -23,10 +23,10 @@ BASE_PATH = Path('robust-experiments')
 def main(disable_wandb=True):
     ToolboxRegistry.register_env('Pogema-v0', create_env_base, Environment)
     ToolboxRegistry.register_algorithm('A*', BatchAStarAgent)
-    ToolboxRegistry.register_algorithm('Follower', FollowerInference, FollowerInferenceConfig,
-                                       follower_preprocessor)
-    ToolboxRegistry.register_algorithm('FollowerLite', FollowerInferenceCPP, FollowerConfigCPP,
-                                       follower_cpp_preprocessor)
+    # ToolboxRegistry.register_algorithm('Follower', FollowerInference, FollowerInferenceConfig,
+    #                                    follower_preprocessor)
+    # ToolboxRegistry.register_algorithm('FollowerLite', FollowerInferenceCPP, FollowerConfigCPP,
+    #                                    follower_cpp_preprocessor)
     ToolboxRegistry.register_algorithm('FollowerRobust', FollowerInferenceRobust, FollowerConfigRobust,
                                        follower_preprocessor)
     with open("env/test-maps.yaml", 'r') as f:
