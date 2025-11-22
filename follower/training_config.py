@@ -45,7 +45,7 @@ class EnvironmentMazes(Environment):
     agent_bins: Optional[list] = [128, 256, 256, 256]
     grid_config: DecMAPFConfig = DecMAPFConfig(on_target='restart', max_episode_steps=512,
                                                map_name=r'mazes-.+')
-
+    
 
 class Experiment(BaseModel):
     environment: EnvironmentMazes = EnvironmentMazes()
@@ -91,7 +91,7 @@ class Experiment(BaseModel):
     lr_schedule: str = 'kl_adaptive_minibatch'
 
     experiment: str = 'exp'
-    train_dir: str = 'experiments/train_dir'
+    train_dir: str = 'robust-experiments/train_dir'
     seed: Optional[int] = 42
     use_wandb: bool = True
 

@@ -1,7 +1,7 @@
-from pogema_toolbox.create_env import create_env_base, Environment
+from pogema_toolbox.create_env import  Environment
 from pogema_toolbox.evaluator import evaluation
 from pogema import BatchAStarAgent
-
+from env.create_env_eval import create_env_eval, BugEnvironment
 from pogema_toolbox.eval_utils import initialize_wandb, save_evaluation_results
 
 from pathlib import Path
@@ -21,10 +21,10 @@ BASE_PATH = Path('robust-experiments')
 
 
 def main(disable_wandb=True):
-    ToolboxRegistry.register_env('Pogema-v0', create_env_base, Environment)
+    ToolboxRegistry.register_env('Pogema-v0', create_env_eval, BugEnvironment)
     ToolboxRegistry.register_algorithm('A*', BatchAStarAgent)
-    # ToolboxRegistry.register_algorithm('Follower', FollowerInference, FollowerInferenceConfig,
-    #                                    follower_preprocessor)
+    ToolboxRegistry.register_algorithm('Follower', FollowerInference, FollowerInferenceConfig,
+                                       follower_preprocessor)
     # ToolboxRegistry.register_algorithm('FollowerLite', FollowerInferenceCPP, FollowerConfigCPP,
     #                                    follower_cpp_preprocessor)
     ToolboxRegistry.register_algorithm('FollowerRobust', FollowerInferenceRobust, FollowerConfigRobust,

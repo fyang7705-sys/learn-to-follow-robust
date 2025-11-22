@@ -26,6 +26,7 @@ except ImportError:
 import torch
 from sample_factory.utils.utils import log
 from pydantic import Extra, validator
+from follower.preprocessing import PreprocessorConfig
 
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.model.actor_critic import create_actor_critic
@@ -58,7 +59,7 @@ class FollowerInferenceConfig(AlgoBase, extra=Extra.forbid):
     name: Literal['Follower'] = 'Follower'
 
     path_to_weights: str = "model/follower"
-    # preprocessing: PreprocessorConfig = PreprocessorConfig()
+    preprocessing: PreprocessorConfig = PreprocessorConfig()
     override_config: Optional[dict] = None
     training_config: Optional[Experiment] = None
     custom_path_to_weights: Optional[str] = None

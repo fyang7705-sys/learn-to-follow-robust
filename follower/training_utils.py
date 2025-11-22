@@ -14,7 +14,7 @@ from follower.training_config import Experiment
 from sample_factory.utils.utils import log
 
 from follower.register_env import register_custom_components
-from follower.register_training_utils import register_custom_model, register_msg_handlers
+from follower_robust.register_training_utils import register_msg_handlers, register_custom_model_context
 
 
 def create_sf_config(exp: Experiment):
@@ -26,7 +26,7 @@ def create_sf_config(exp: Experiment):
 
 
 def run(config=None):
-    register_custom_model()
+    register_custom_model_context()
 
     if config is None:
         import argparse
@@ -64,7 +64,7 @@ def run(config=None):
     log.info(flat_config)
 
     # if exp.train_for_env_steps == 1_000_000:
-    #     exp.use_wandb = False   
+    exp.use_wandb = False   
 
     if exp.use_wandb:
         import os

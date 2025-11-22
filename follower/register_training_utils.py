@@ -1,4 +1,4 @@
-from follower.model import ResnetEncoder
+from follower.model import ResnetEncoder, ResnetEncoder_context
 
 from sample_factory.algo.utils.context import global_model_factory
 from sample_factory.utils.typing import ObsSpace
@@ -37,10 +37,10 @@ def register_msg_handlers(cfg: Config, runner: Runner):
     runner.register_observer(CustomExtraSummariesObserver())
 
 
+
 def make_custom_encoder(cfg: Config, obs_space: ObsSpace) -> Encoder:
     """Factory function as required by the API."""
     return ResnetEncoder(cfg, obs_space)
-
 
 def register_custom_model():
     global_model_factory().register_encoder_factory(make_custom_encoder)

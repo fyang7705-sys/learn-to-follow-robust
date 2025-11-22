@@ -35,7 +35,7 @@ from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
 from sample_factory.model.actor_critic import create_actor_critic
 # from follower.algorithm_utils import AlgoBase
 
-from follower.register_training_utils import register_custom_model
+from follower_robust.register_training_utils import register_custom_model_context
 from pathlib import Path
 from datetime import datetime
 
@@ -52,7 +52,7 @@ class FollowerInferenceRobust:
         self.algo_cfg: FollowerInferenceConfig = config
         device = config.device
 
-        register_custom_model()
+        register_custom_model_context()
         self.path = config.path_to_weights
 
         
@@ -94,12 +94,8 @@ class FollowerInferenceRobust:
 
         if self.algo_cfg.custom_path_to_weights:
             log.info(f"custom_path_to_weights:{self.algo_cfg.custom_path_to_weights}")
-            checkpoints = [self.algo_cfg.custom_path_to_weights]
-
-        checkpoint_dict = Learner.load_checkpoint(checkpoints, device)
-        actor_critic.load_state_dict(checkpoint_dict['model'])
-        log.info(f'Loaded {str(checkpoints)}')
-
+            checkpoint = torch.load(self.algo_cfg.custom_path_to_weights, map_location="cpu")
+        actor_critic.load_state_dict(checkpoint['model'])        
         self.net = actor_critic
         self.device = device
         self.cfg = config
@@ -135,6 +131,7 @@ class FollowerInferenceRobust:
         obs = AttrDict(self.transform_dict_observations(observations))
         with torch.no_grad():
             normalized_obs = prepare_and_normalize_obs(self.net, obs)
+            # log.error(f"normalized_obs{normalized_obs}")
             # print("normalized_obs shape", {k: v.shape for k, v in normalized_obs.items()})
             policy_outputs = self.net(normalized_obs, self.rnn_states)
             if self.save_json:
@@ -142,10 +139,16 @@ class FollowerInferenceRobust:
         # print(f"observations after prepare_and_normalize_obs:{obs}\n")
         self.rnn_states = policy_outputs['new_rnn_states']
         # print(f"policy_outputs:, {policy_outputs}\n")
+        # return policy_outputs['actions'].cpu().numpy()
+        bug_prob = 0.0
+        action_outputs = self.bug_action(policy_outputs['actions'].cpu().numpy(), bug_prob)
+        return action_outputs
+    
+    def bug_action(self, action_outputs, bug_prob):
+        random_values = np.random.random(action_outputs.shape)
+        action_outputs[random_values < bug_prob] = 0
+        return action_outputs
 
-
-
-        return policy_outputs['actions'].cpu().numpy()
 
     def reset_states(self):
         torch.manual_seed(self.algo_cfg.seed)

@@ -14,7 +14,7 @@ from pogema import GridConfig
 
 from env.custom_maps import MAPS_REGISTRY
 from follower.preprocessing import wrap_preprocessors, PreprocessorConfig
-
+from env.create_env_eval import BugActionWrapper, BugEnvironment
 
 class ProvideGlobalObstacles(gymnasium.Wrapper):
     def get_global_obstacles(self):
@@ -35,6 +35,12 @@ def create_env_base(config: Environment):
     # adding runtime metrics
     env = RuntimeMetricWrapper(env)
 
+    return env
+
+def create_bug_env(config: BugEnvironment):
+    
+    env = create_env_base(config=config)
+    env = BugActionWrapper(env, config)
     return env
 
 

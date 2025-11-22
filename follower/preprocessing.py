@@ -1,6 +1,6 @@
 import numpy as np
 import gymnasium
-from gymnasium import ObservationWrapper, ActionWrapper
+from gymnasium import ObservationWrapper
 from gymnasium.spaces import Box, Dict
 import torch
 from pydantic import BaseModel
@@ -41,7 +41,7 @@ class PreprocessorConfig(PlannerConfig):
         transformer_layers=2,
         transformer_heads=4,
     )
-    bug_probs: List[float] = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+    
 
 
 
@@ -57,7 +57,7 @@ def wrap_preprocessors(env, config: PreprocessorConfig, auto_reset=False):
     env = ConcatPositionalFeatures(env)
     if config.use_latent_embedding:
         env = EncodeDataCollectionWrapper(env, config=config)
-        env = BugActionWrapper(env, config=config)
+        # env = BugActionWrapper(env, config=config)
     if auto_reset:
         env = AutoResetWrapper(env)
     return env
@@ -302,27 +302,7 @@ class EncodeDataCollectionWrapper(ObservationWrapper):
         return self.observation(obs), info
 
 
-class BugActionWrapper(ActionWrapper):
-    def __init__(self, env, config):
-        super().__init__(env)
-        self.bug_probs = config.bug_probs
-        self.bug_prob = 0.0
-        self.episode = 0
-    def bug_action(self, action_outputs, bug_prob):
-        # print("action", action_outputs)
-        action_outputs = np.array(action_outputs, dtype=np.int64)
-        random_values = np.random.random(len(action_outputs))
-        action_outputs[random_values < bug_prob] = 0
-        # print("giao")
-        return action_outputs.tolist()
-    def action(self, action) :
-        return self.bug_action(action, self.bug_prob)
-    
-    def reset(self, **kwargs):
-        observations, infos = self.env.reset(**kwargs)
-        self.bug_prob = self.bug_probs[(self.episode) % (len(self.bug_probs) * 100) //  100]
-        self.episode += 1
-        return observations, infos
+
     
     
 
