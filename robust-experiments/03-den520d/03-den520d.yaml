@@ -1,0 +1,44 @@
+environment:
+  name: Pogema-v0 
+  on_target: restart
+  max_episode_steps: 512
+  observation_type: POMAPF
+  collision_system: soft
+  map_name: den520d
+  num_agents:
+    grid_search: [256 ]
+  seed:
+    grid_search: [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 ]
+  custom_bug_prob:
+    grid_search: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+algorithms:
+  Follower:
+    name: Follower
+    num_process: 64
+    parallel_backend: 'balanced_dask'
+  #   run_episode_func: 'collect_data'
+    # custom_path_to_weight: model/follower
+  
+  FollowerRobust:
+    name: FollowerRobust
+    num_process: 64
+    parallel_backend: 'balanced_dask'
+    custom_path_to_weights: "model/follower-robust/checkpoint/best_000024560_402391040_avg_throughput_1.674.pth"
+  TabularResults:
+    type: tabular
+    drop_keys: [ seed ]
+    print_results: True
+
+  03-den520d:
+    type: plot
+    x: custom_bug_prob
+    y: avg_throughput
+    width: 2.5
+    height: 2.5
+    line_width: 2
+    use_log_scale_x: False
+    legend_font_size: 8
+    font_size: 8
+    hue_order: [ FollowerRobust, Follower]
+    name: den520d $64 \times 64$
+    ticks: [ 0.0, 0.1, 0.2, 0.3, 0.4, 0.5]

@@ -10,6 +10,7 @@ except ImportError:
 
 from pogema import GridConfig
 from pydantic import BaseModel
+from typing import List, Optional
 
 
 class DecMAPFConfig(GridConfig):
@@ -45,7 +46,8 @@ class EnvironmentMazes(Environment):
     agent_bins: Optional[list] = [128, 256, 256, 256]
     grid_config: DecMAPFConfig = DecMAPFConfig(on_target='restart', max_episode_steps=512,
                                                map_name=r'mazes-.+')
-    
+    bug_probs: List[float] = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+    custom_bug_prob: Optional[float] = None
 
 class Experiment(BaseModel):
     environment: EnvironmentMazes = EnvironmentMazes()

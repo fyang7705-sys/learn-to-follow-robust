@@ -35,8 +35,8 @@ def main(disable_wandb=True):
 
     folder_names = [
         '01-random-20x20',
-        # '02-mazes',
-        # '03-den520d',
+        '02-mazes',
+        '03-den520d',
         # '04-Paris_1',
         # '05-warehouse',
     ]

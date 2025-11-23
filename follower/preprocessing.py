@@ -219,7 +219,7 @@ class EncodeDataCollectionWrapper(ObservationWrapper):
         self.terminal_buffer = []
         self.window_size = config.inference_windowsize
         self.inference_net = CNNEncoder()
-        inference_net_state_dict = torch.load(config.inference_net.weight_path, map_location = torch.device('cpu'))
+        inference_net_state_dict = torch.load(config.inference_net.weight_path, map_location = torch.device('cuda'))
         self.inference_net.load_state_dict(inference_net_state_dict)
         self.inference_net.eval()
         self.env.observation_space['latent'] = Box(low=-np.inf, high=np.inf, shape=(config.inference_net.task_embedding_size,), dtype=np.float32,)

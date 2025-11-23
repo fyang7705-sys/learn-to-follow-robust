@@ -6,20 +6,20 @@ from env.create_env import create_bug_env
 from follower.training_config import Experiment
 
 import gymnasium
-from follower.training_config import Environment
+from follower.training_config import Environment, EnvironmentMazes
 from env.create_env_eval import BugEnvironment
 
 from follower.preprocessing import PreprocessorConfig, wrap_preprocessors
 
 
-def create_env(environment_cfg: BugEnvironment, preprocessing_cfg: PreprocessorConfig):
+def create_env(environment_cfg: EnvironmentMazes, preprocessing_cfg: PreprocessorConfig):
     env = create_bug_env(environment_cfg)
     env = wrap_preprocessors(env, config=preprocessing_cfg, auto_reset=True)
     return env
 
 
 class MultiEnv(gymnasium.Wrapper):
-    def __init__(self, env_cfg: BugEnvironment, preprocessing_cfg: PreprocessorConfig):
+    def __init__(self, env_cfg: EnvironmentMazes, preprocessing_cfg: PreprocessorConfig):
         if env_cfg.target_num_agents is None:
             self.envs = [create_env(env_cfg, preprocessing_cfg)]
         else:

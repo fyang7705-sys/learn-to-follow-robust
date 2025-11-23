@@ -26,16 +26,16 @@ environment:
 algorithms:
   Follower:
     name: Follower
-    num_process: 32
+    num_process: 64
     parallel_backend: 'balanced_dask'
   #   run_episode_func: 'collect_data'
     # custom_path_to_weight: model/follower
   
   FollowerRobust:
     name: FollowerRobust
-    num_process: 32
+    num_process: 64
     parallel_backend: 'balanced_dask'
-    custom_path_to_weights: "model/follower-robust/checkpoint/best_000022496_368574464_avg_throughput_2.018.pth"
+    custom_path_to_weights: "model/follower-robust/checkpoint/best_000024560_402391040_avg_throughput_1.674.pth"
   # FollowerLite:
   #   name: FollowerLite
   #   num_process: 4

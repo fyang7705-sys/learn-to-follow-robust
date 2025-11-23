@@ -5,7 +5,7 @@ from pogema import AnimationConfig, AnimationMonitor
 
 from pogema import pogema_v0
 
-from follower.training_config import Environment
+from follower.training_config import Environment, EnvironmentMazes
 
 import gymnasium
 import re
@@ -37,7 +37,7 @@ def create_env_base(config: Environment):
 
     return env
 
-def create_bug_env(config: BugEnvironment):
+def create_bug_env(config: EnvironmentMazes):
     
     env = create_env_base(config=config)
     env = BugActionWrapper(env, config)
