@@ -199,7 +199,7 @@
     "inference_net": {
       "weight_path": "model/follower-robust/checkpoint/encoder/encoder_20251118_065830_762916.pt",
       "hidden_size": 64,
-      "task_embedding_size": 32,
+      "task_embedding_size": 1,
       "action_size": 1,
       "reward_size": 1,
       "term_size": 1,

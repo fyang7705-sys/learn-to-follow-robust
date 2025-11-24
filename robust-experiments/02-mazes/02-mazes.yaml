@@ -35,7 +35,7 @@ algorithms:
     name: FollowerRobust
     num_process: 64
     parallel_backend: 'balanced_dask'
-    custom_path_to_weights: "model/follower-robust/checkpoint/best_000024560_402391040_avg_throughput_1.674.pth"
+    custom_path_to_weights: "model/follower-robust/checkpoint/best_000027904_457179136_avg_throughput_1.687.pth"
   # FollowerLite:
   #   name: FollowerLite
   #   num_process: 4

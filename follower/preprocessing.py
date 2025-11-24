@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from follower.planning import ResettablePlanner, PlannerConfig
 from follower_robust.encoder import CNNEncoder
 from typing import List
+from sample_factory.utils.utils import log
 
 class InferenceNetConfig(BaseModel):
     weight_path: str
@@ -31,7 +32,7 @@ class PreprocessorConfig(PlannerConfig):
     inference_net: InferenceNetConfig = InferenceNetConfig(
         weight_path="model/follower-robust/checkpoint/encoder/encoder_20251118_065830_762916.pt",
         hidden_size=64,
-        task_embedding_size=32,
+        task_embedding_size=1,
         action_size=1,
         reward_size=1,
         term_size=1,
@@ -218,11 +219,14 @@ class EncodeDataCollectionWrapper(ObservationWrapper):
         self.action_buffer = []
         self.terminal_buffer = []
         self.window_size = config.inference_windowsize
-        self.inference_net = CNNEncoder()
+        # self.inference_net = CNNEncoder(task_embedding_size = config.inference_net.task_embedding_size)
         inference_net_state_dict = torch.load(config.inference_net.weight_path, map_location = torch.device('cuda'))
-        self.inference_net.load_state_dict(inference_net_state_dict)
-        self.inference_net.eval()
+        # self.inference_net.load_state_dict(inference_net_state_dict)
+        # self.inference_net.eval()
+        self.cfg = config
+        self.bug_prob = env.bug_prob
         self.env.observation_space['latent'] = Box(low=-np.inf, high=np.inf, shape=(config.inference_net.task_embedding_size,), dtype=np.float32,)
+        # log.warning(f"config.inference_net.task_embedding_size: {config.inference_net.task_embedding_size}")
         
     def step(self, action):
         observations, reward, terminated, truncated, info = self.env.step(action)
@@ -280,16 +284,18 @@ class EncodeDataCollectionWrapper(ObservationWrapper):
                 rew_t = torch.stack(rew_pad, dim=0).transpose(0,1)
                 term_t = torch.stack(term_pad, dim=0).transpose(0,1)
 
-            with torch.no_grad():
-                z = self.inference_net(obs_t, act_t, rew_t, term_t)
-                z = z.cpu().numpy()  # (B, embedding_size)
-
+            # with torch.no_grad():
+            #     z = self.inference_net(obs_t, act_t, rew_t, term_t)
+            #     z = z.cpu().numpy()  # (B, embedding_size)
+            z = self.bug_prob
+            # log.info(f"z:{z}") 
+            # log.error(f"self.inference_net.task_embedding_size{self.inference_net.task_embedding_size}")
             # put into observations
             for i in range(len(observations)):
-                observations[i]['latent'] = z[i]
+                observations[i]['latent'] = np.array([z], dtype=np.float32)
         else:
             for i in range(len(observations)):
-                observations[i]['latent'] = np.zeros((self.inference_net.task_embedding_size,))
+                observations[i]['latent'] = np.zeros((self.cfg.inference_net.task_embedding_size,))
         return observations
     
     def reset(self, **kwargs):

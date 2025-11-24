@@ -28,18 +28,21 @@ environment:
   custom_bug_prob:
     grid_search: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 algorithms:
+
+  
+  FollowerRobust:
+    name: FollowerRobust
+    num_process: 64
+    parallel_backend: 'balanced_dask'
+    custom_path_to_weights: "model/follower-robust/checkpoint/best_000027904_457179136_avg_throughput_1.687.pth"
+
+
   Follower:
     name: Follower
     num_process: 64
     parallel_backend: 'balanced_dask'
   #   run_episode_func: 'collect_data'
     # custom_path_to_weight: model/follower
-  
-  FollowerRobust:
-    name: FollowerRobust
-    num_process: 64
-    parallel_backend: 'balanced_dask'
-    custom_path_to_weights: "model/follower-robust/checkpoint/best_000024560_402391040_avg_throughput_1.674.pth"
   # FollowerLite:
   #   name: FollowerLite
   #   num_process: 4

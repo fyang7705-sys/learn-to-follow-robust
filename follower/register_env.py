@@ -1,7 +1,7 @@
 import numpy as np
 from sample_factory.utils.typing import Env
 from sample_factory.envs.env_utils import register_env
-
+from sample_factory.utils.utils import log
 from env.create_env import create_bug_env
 from follower.training_config import Experiment
 
@@ -13,6 +13,7 @@ from follower.preprocessing import PreprocessorConfig, wrap_preprocessors
 
 
 def create_env(environment_cfg: EnvironmentMazes, preprocessing_cfg: PreprocessorConfig):
+    # log.error(f"preprocessing_cfg.inference_net.task_embedding_size: {preprocessing_cfg.inference_net.task_embedding_size}")
     env = create_bug_env(environment_cfg)
     env = wrap_preprocessors(env, config=preprocessing_cfg, auto_reset=True)
     return env
