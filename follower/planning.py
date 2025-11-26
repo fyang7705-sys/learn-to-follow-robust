@@ -55,7 +55,7 @@ class Planner:
     def get_path(self):
         results = []
         for idx in range(len(self.planner)):
-            results.append(self.planner[idx].get_path())
+            results.append(self.planner[idx].get_focal_paths())
         return results
 
 
