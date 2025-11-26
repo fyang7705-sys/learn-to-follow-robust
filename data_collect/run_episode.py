@@ -37,12 +37,12 @@ def collect_data(env, algo):
         old_obs = copy.deepcopy(obs)
 
         action = algo.act(obs)
+        buffer_actions.append(torch.tensor(action)) # 有华点, action应该在bug_action前被录入
         action = bug_action(action, bug_prob)
 
         obs, rew, terminated, truncated, infos = env.step(action)
         results_holder.after_step(infos)
         buffer_obs.append(torch.tensor([o['obs'] for o in obs]))
-        buffer_actions.append(torch.tensor(action))
         buffer_rewards.append(torch.tensor(rew))
 
         if len(buffer_obs) == WINDOW_SIZE:

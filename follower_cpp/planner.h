@@ -2,6 +2,8 @@
 #include <pybind11/stl.h>
 #include <pybind11/stl_bind.h>
 #include <pybind11/numpy.h>
+#include <pybind11/pybind11.h>
+
 #include <vector>
 #include <queue>
 #include <cmath>
@@ -9,16 +11,24 @@
 #include <map>
 #include <list>
 #include <iostream>
+#include <random>
+#include <chrono>
 #define INF 1000000000
 namespace py = pybind11;
 
 struct Node {
-    Node(int _i = INF, int _j = INF, float _g = INF, float _h = 0) : i(_i), j(_j), g(_g), h(_h), f(_g+_h){}
+    Node(int _i = INF, int _j = INF, float _g = INF, float _h = 0, float _focal_value = INF) : i(_i), j(_j), g(_g), h(_h), f(_g+_h), focal_value(_focal_value)
+    {
+        visited = false;
+        parent = {INF, INF}; 
+    }
     int i;
     int j;
     float g;
     float h;
     float f;
+    float focal_value;
+    bool visited;
     std::pair<int, int> parent;
     bool operator<(const Node& other) const
     {
@@ -49,9 +59,12 @@ class planner
     std::vector<std::vector<float>> penalties;
     std::vector<std::vector<float>> h_values;
     std::vector<std::vector<Node>> nodes;
+    std::list<std::list<std::pair<int, int>>> focal_paths;
     bool use_static_cost;
     bool use_dynamic_cost;
     bool reset_dynamic_cost;
+    float w;
+    float g_weight;
     inline float h(std::pair<int, int> n)
     {
         //return abs(n.first - goal.first) + abs(n.second - goal.second);
@@ -94,6 +107,213 @@ class planner
         }
     }
 
+    float frechet_distance(const std::list<std::pair<int,int>>& p_list, const std::list<std::pair<int,int>>& q_list)
+    {
+        int n = p_list.size();
+        int m = q_list.size();
+        if (n == 0 || m == 0) return 1e9f;
+        std::vector<std::pair<int,int>> p(p_list.begin(), p_list.end());
+        std::vector<std::pair<int,int>> q(q_list.begin(), q_list.end());
+        // dp[i][j]
+        std::vector<std::vector<float>> dp(n, std::vector<float>(m, 0.0));
+
+        auto dist = [&](int i, int j) {
+            float dx = p[i].first  - q[j].first;
+            float dy = p[i].second - q[j].second;
+            return std::sqrt(dx*dx + dy*dy);
+        };
+
+        dp[0][0] = dist(0,0);
+
+        for (int i = 1; i < n; i++)
+            dp[i][0] = std::max(dp[i-1][0], dist(i, 0));
+
+        for (int j = 1; j < m; j++)
+            dp[0][j] = std::max(dp[0][j-1], dist(0, j));
+
+        for (int i = 1; i < n; i++) {
+            for (int j = 1; j < m; j++) {
+                float d = dist(i, j);
+                float prev = std::min({ dp[i-1][j], dp[i][j-1], dp[i-1][j-1] });
+                dp[i][j] = std::max(d, prev);
+            }
+        }
+        return dp[n-1][m-1];
+    }
+
+    bool is_similar_to_existing(const std::list<std::pair<int,int>>& new_path, float threshold)
+    {
+        for (const auto& p : focal_paths) {
+            float d = frechet_distance(new_path, p);
+            if (d < threshold)
+                return true;   // 过于相似，拒绝
+        }
+        return false;
+    }
+
+    float dir_consistency(Node & node, std::pair<int, int> & goal) {
+        // 如果 parent 未初始化（INF），返回 0
+        if (node.parent.first == INF && node.parent.second == INF)
+            return 0.0f;
+
+        // 当前节点相对父节点的方向
+        int dir_i = node.i - node.parent.first;
+        int dir_j = node.j - node.parent.second;
+
+        // 理想方向（x/y轴正负极）
+        int goal_dir_i = 0, goal_dir_j = 0;
+        if (node.i != goal.first)
+            goal_dir_i = (node.i < goal.first) ? 1 : -1;
+        if (node.j != goal.second)
+            goal_dir_j = (node.j < goal.second) ? 1 : -1;
+
+        return (dir_i == goal_dir_i && dir_j == goal_dir_j) ? 1.0f : 0.0f;
+    }
+
+    float calculate_focal_value(Node & node, std::pair<int, int> & goal) {
+        int grid_width =  grid.front().size();
+        int grid_height = grid.size();
+        float consistency = dir_consistency(node, goal);
+        int max_g = grid_width + grid_height;
+        float normalized_g = (max_g != 0) ? (node.g / max_g) : 0.0f;
+        return 1.0f - ((1 - g_weight) * consistency + g_weight * (1.0f - normalized_g));
+    }
+
+    float calculate_diverse_focal_value(Node & node, std::pair<int, int> & goal)
+    {
+        int grid_width =  grid.front().size();
+        int grid_height = grid.size();
+        float diversity = calculate_diversity_score(node);
+        int max_g = grid_width + grid_height;
+        float normalized_g = (max_g != 0) ? (node.g / max_g) : 0.0f;
+        return g_weight * normalized_g + (1 - g_weight) * diversity;
+    }
+
+    float calculate_diversity_score(Node & node)
+    {
+        int grid_width =  grid.front().size();
+        int grid_height = grid.size();
+        if (focal_paths.empty()) return 0.0f;
+        float min_dist_to_existing = INF;
+        for (const auto& path : focal_paths)
+        {
+            for (const auto& existing : path)
+            {                
+                float dist = std::hypot(existing.first - node.i, existing.second - node.j);
+                if (dist < min_dist_to_existing) min_dist_to_existing = dist;
+            }        
+        }
+        float max_possible_dist = std::hypot(grid_width, grid_height);
+        return (max_possible_dist != 0) ? (min_dist_to_existing / max_possible_dist) : 0.0f;
+    }
+
+    std::list<std::pair<int, int>> compute_focal_path_once()
+    {
+        reset();
+        std::vector<Node> focal;
+        std::vector<Node> temp_nodes;
+        float f_min_local = INF;
+        // py::print("start", start.first, start.second);
+        while (!OPEN.empty())
+        {
+
+            while(!OPEN.empty() && nodes[OPEN.top().i][OPEN.top().j].visited) OPEN.pop();
+            if (OPEN.empty()) break;
+
+            f_min_local = OPEN.top().f;
+            // 构建 focal 列表（f <= (1 + w) * f_min）
+            float f_limit = (1.0 + w) * f_min_local;
+            // py::print("f_limit", f_limit);
+            while (!OPEN.empty())
+            {
+                Node nd = OPEN.top();
+                OPEN.pop();
+                if (nodes[nd.i][nd.j].visited) continue; 
+                temp_nodes.push_back(nd);
+                
+                if (nd.f > f_limit) break;
+                focal.push_back(nd);
+            }
+
+            for (auto &n : temp_nodes) 
+                if (!nodes[n.i][n.j].visited) OPEN.push(n); // 重新入堆
+            
+            temp_nodes.clear();
+
+            if (focal.empty()) break;
+            // 按 focal_value 排序
+            std::sort(focal.begin(), focal.end(),
+                      [](const Node &a, const Node &b)
+                      {
+                          return a.focal_value < b.focal_value;
+                      });
+
+            int choose_count = std::min((int)focal.size(), 3);
+            int idx = rand() % choose_count;
+
+            Node current = focal[idx];
+
+            nodes[current.i][current.j].visited = true;
+            if (current.i == goal.first && current.j == goal.second) return get_path();
+            for (auto npos : get_neighbors({current.i, current.j}))
+            {
+                Node &neighbor = nodes[npos.first][npos.second];
+                // py::print("neighbor: ", npos.first, npos.second, neighbor.visited);
+                if (neighbor.visited)
+                    continue;
+
+                float cost = 1;
+                if (use_static_cost)
+                    cost = penalties[npos.first][npos.second];
+                if (use_dynamic_cost)
+                    cost += num_occupations[npos.first][npos.second];
+
+                float new_g = current.g + cost;
+                float new_f = new_g + h(npos);
+
+                if (new_g < neighbor.g)
+                {
+                    neighbor.i = npos.first;
+                    neighbor.j = npos.second;
+                    neighbor.g = new_g;
+                    neighbor.h = h(npos);
+                    neighbor.f = new_f;
+
+                    neighbor.focal_value = calculate_diverse_focal_value(neighbor, goal);
+                    neighbor.parent = {current.i, current.j};
+                    OPEN.push(neighbor);
+                }
+            }
+            focal.clear();
+        }
+        return std::list<std::pair<int, int>>();
+    }
+
+    void compute_focal_paths(int candidate_num = 3, int max_tries = 20, float w_min = 1.0, float w_max = 5.0)
+    {
+        int total_tries = 0;
+        int path_found = 0;
+        float frechet_threshold = 3.0;
+        std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+        std::uniform_real_distribution<float> dist_w(w_min, w_max);
+        std::uniform_real_distribution<float> dist_g_weight(0, 1);
+        focal_paths.clear();
+        while(total_tries < max_tries && path_found < candidate_num)
+        {
+            w = dist_w(rng);
+            g_weight = dist_g_weight(rng);
+            auto path = compute_focal_path_once();
+            if(!path.empty())
+            {
+                if (!is_similar_to_existing(path, frechet_threshold))
+                {
+                    focal_paths.push_back(path);
+                    path_found++;
+                }
+            }
+            total_tries++;
+        }
+    }
     float get_avg_distance(int si, int sj)
     {
         std::queue<std::pair<int, int>> fringe;
@@ -153,7 +373,8 @@ class planner
     {
         nodes = std::vector<std::vector<Node>>(grid.size(), std::vector<Node>(grid.front().size(), Node()));
         OPEN = std::priority_queue<Node, std::vector<Node>, std::greater<Node>>();
-        Node s = Node(start.first, start.second, 0, h(start));
+        Node s = Node(start.first, start.second, 0, h(start), calculate_focal_value(s, goal));
+        nodes[start.first][start.second] = s;
         OPEN.push(s);
     }
 
@@ -234,6 +455,22 @@ public:
         goal = g;
         reset();
         compute_shortest_path();
+    }
+
+    void update_focal_paths(std::pair<int, int> s, std::pair<int, int> g)
+    {
+        s = {s.first + abs_offset.first, s.second + abs_offset.second};
+        g = {g.first + abs_offset.first, g.second + abs_offset.second};
+        start = s;
+        if(goal != g)
+            update_h_values(g);
+        goal = g;
+        compute_focal_paths();
+    }
+
+    std::list<std::list<std::pair<int, int>>> get_focal_paths()
+    {
+        return focal_paths;
     }
 
     std::list<std::pair<int, int>> get_path()
