@@ -79,48 +79,97 @@ class FollowerWrapper(ObservationWrapper):
             return None, None
         return obs_radius - dx, obs_radius - dy
 
+    # def observation(self, observations):
+    #     # Update cost penalties based on the current observations, independently for each agent.
+    #     self.re_plan.update(observations)
+
+    #     # Retrieve the shortest path to the global target for each agent.
+    #     paths = self.re_plan.get_path()
+
+    #     new_goals = []  # Initialize a list to store new goals for each agent.
+    #     intrinsic_rewards = []  # Initialize a list to store intrinsic rewards for each agent.
+
+    #     # Iterate through agents and their respective paths.
+    #     for k, path in enumerate(paths):
+    #         obs = observations[k]
+
+    #         # Check if there is no valid path available.
+    #         if path is None:
+    #             new_goals.append(obs['target_xy'])  # Use the target position as a new goal.
+    #             path = []
+    #         else:
+    #             # Check if the agent reached their subgoal from its previous step
+    #             subgoal_achieved = self.prev_goals and obs['xy'] == self.prev_goals[k]
+    #             # Assign an intrinsic reward if conditions are met, otherwise set it to 0.
+    #             intrinsic_rewards.append(self._cfg.intrinsic_target_reward if subgoal_achieved else 0.0)
+    #             # Select a new target point.
+    #             new_goals.append(path[1])
+
+    #         # Set obstacle values to -1.0 in the observation.
+    #         obs['obstacles'][obs['obstacles'] > 0] *= -1
+
+    #         # Adding path to the observation, setting path values to +1.0.
+    #         r = obs['obstacles'].shape[0] // 2
+    #         for idx, (gx, gy) in enumerate(path):
+    #             x, y = self.get_relative_xy(*obs['xy'], gx, gy, r)
+    #             if x is not None and y is not None:
+    #                 obs['obstacles'][x, y] = 1.0
+    #             else:
+    #                 break
+    #         # print(obs['obstacles'])
+    #     # Update the previous goals and intrinsic rewards for the next step.
+    #     self.prev_goals = new_goals
+    #     self.intrinsic_reward = intrinsic_rewards
+
+    #     return observations
+
     def observation(self, observations):
-        # Update cost penalties based on the current observations, independently for each agent.
         self.re_plan.update(observations)
+        
+        paths_list = self.re_plan.get_path()  
 
-        # Retrieve the shortest path to the global target for each agent.
-        paths = self.re_plan.get_path()
-
-        new_goals = []  # Initialize a list to store new goals for each agent.
-        intrinsic_rewards = []  # Initialize a list to store intrinsic rewards for each agent.
-
-        # Iterate through agents and their respective paths.
-        for k, path in enumerate(paths):
+        new_goals = []
+        intrinsic_rewards = []
+        # print("path_list", paths_list)    
+        for k, candidate_paths in enumerate(paths_list):
             obs = observations[k]
+            # print("candidate_paths", candidate_paths)
+            if not candidate_paths:
+                new_goals.append(obs['target_xy'])
+                candidate_paths = []
 
-            # Check if there is no valid path available.
-            if path is None:
-                new_goals.append(obs['target_xy'])  # Use the target position as a new goal.
-                path = []
+            subgoal_achieved = False
+            if self.prev_goals:
+                for path in candidate_paths:
+                    if obs['xy'] in path:
+                        subgoal_achieved = True
+                        break
+            intrinsic_rewards.append(self._cfg.intrinsic_target_reward if subgoal_achieved else 0.0)
+
+
+            if candidate_paths:
+                # 任意一条路径的第一个可行节点作为 subgoal
+                new_goals.append(candidate_paths[0][1] if len(candidate_paths[0]) > 1 else candidate_paths[0][0])
             else:
-                # Check if the agent reached their subgoal from its previous step
-                subgoal_achieved = self.prev_goals and obs['xy'] == self.prev_goals[k]
-                # Assign an intrinsic reward if conditions are met, otherwise set it to 0.
-                intrinsic_rewards.append(self._cfg.intrinsic_target_reward if subgoal_achieved else 0.0)
-                # Select a new target point.
-                new_goals.append(path[1])
+                new_goals.append(obs['target_xy'])
 
-            # Set obstacle values to -1.0 in the observation.
+
             obs['obstacles'][obs['obstacles'] > 0] *= -1
-
-            # Adding path to the observation, setting path values to +1.0.
             r = obs['obstacles'].shape[0] // 2
-            for idx, (gx, gy) in enumerate(path):
-                x, y = self.get_relative_xy(*obs['xy'], gx, gy, r)
-                if x is not None and y is not None:
-                    obs['obstacles'][x, y] = 1.0
-                else:
-                    break
-            # print(obs['obstacles'])
-        # Update the previous goals and intrinsic rewards for the next step.
+
+            for path in candidate_paths:
+                for gx, gy in path:
+                    x, y = self.get_relative_xy(*obs['xy'], gx, gy, r)
+                    if x is not None and y is not None:
+                        obs['obstacles'][x, y] = 1.0
+                    else:
+                        break
+
         self.prev_goals = new_goals
         self.intrinsic_reward = intrinsic_rewards
-
+        # print("pathlist", paths_list[0])
+        # print(observations[0]['obstacles'])
+        # print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
         return observations
 
     def get_intrinsic_rewards(self, reward):
@@ -218,14 +267,23 @@ class EncodeDataCollectionWrapper(ObservationWrapper):
         self.action_buffer = []
         self.terminal_buffer = []
         self.window_size = config.inference_windowsize
-        self.inference_net = CNNEncoder()
-        inference_net_state_dict = torch.load(config.inference_net.weight_path, map_location = torch.device('cuda'))
+        self.inference_net = CNNEncoder(hidden_size=config.inference_net.hidden_size,
+                 task_embedding_size=config.inference_net.task_embedding_size,
+                 action_size=config.inference_net.action_size,
+                 reward_size=config.inference_net.reward_size,
+                 term_size=config.inference_net.term_size,
+                 obs_shape=config.inference_net.obs_shape,
+                 window_size=config.inference_net.window_size,
+                 normalize=config.inference_net.normalize,
+                 transformer_layers=config.inference_net.transformer_layers,
+                 transformer_heads=config.inference_net.transformer_heads)
+        inference_net_state_dict = torch.load(config.inference_net.weight_path, map_location = torch.device('cpu'))
         self.inference_net.load_state_dict(inference_net_state_dict)
         self.inference_net.eval()
         self.env.observation_space['latent'] = Box(low=-np.inf, high=np.inf, shape=(config.inference_net.task_embedding_size,), dtype=np.float32,)
         
     def step(self, action):
-        observations, reward, terminated, truncated, info = self.env.step(action)
+        observations, reward, terminated, truncated, info = self.env.step(action) # 这里的action应该是传入的action, 还没有经过bug_prob的
 
         # convert obs list to tensor (B, C, H, W)
         obs_tensor = torch.tensor(

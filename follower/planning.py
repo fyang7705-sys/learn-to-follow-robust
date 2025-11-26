@@ -50,8 +50,8 @@ class Planner:
             obs[k]['agents'][obs_radius][obs_radius] = 0
             self.planner[k].update_occupations(obs[k]['agents'], (obs[k]['xy'][0] - obs_radius, obs[k]['xy'][1] - obs_radius), obs[k]['target_xy'])
             obs[k]['agents'][obs_radius][obs_radius] = 1
-            self.planner[k].update_path(obs[k]['xy'], obs[k]['target_xy'])
-
+            self.planner[k].update_focal_paths(obs[k]['xy'], obs[k]['target_xy'])
+            
     def get_path(self):
         results = []
         for idx in range(len(self.planner)):
