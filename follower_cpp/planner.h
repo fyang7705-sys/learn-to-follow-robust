@@ -48,6 +48,14 @@ struct Node {
     }
 };
 
+struct CompareFocal {
+    bool operator()(const Node& a, const Node& b) const {
+        if (std::abs(a.focal_value - b.focal_value) > 1e-5)
+            return a.focal_value > b.focal_value; // Min-heap behavior for focal_value
+        return a.f > b.f; // Tie-break: prefer lower f
+    }
+};
+
 class planner
 {
     std::pair<int, int> start;
@@ -207,86 +215,66 @@ class planner
         return (max_possible_dist != 0) ? (min_dist_to_existing / max_possible_dist) : 0.0f;
     }
 
-    std::list<std::pair<int, int>> compute_focal_path_once()
+
+    std::list<std::pair<int, int>> compute_focal_path_once(float optimal_cost)
     {
-        reset();
-        std::vector<Node> focal;
-        std::vector<Node> temp_nodes;
-        float f_min_local = INF;
-        // py::print("start", start.first, start.second);
-        while (!OPEN.empty())
+        reset(); 
+        if (optimal_cost >= INF) {
+            return {};
+        }
+
+        float cost_limit = optimal_cost * w;
+
+        std::priority_queue<Node, std::vector<Node>, CompareFocal> FOCAL;
+
+        Node &start_node = nodes[start.first][start.second];
+        start_node.focal_value = calculate_diverse_focal_value(start_node, goal);
+        
+        FOCAL.push(start_node);
+
+        while (!FOCAL.empty())
         {
+            Node current = FOCAL.top();
+            FOCAL.pop();
 
-            while(!OPEN.empty() && nodes[OPEN.top().i][OPEN.top().j].visited) OPEN.pop();
-            if (OPEN.empty()) break;
+            if (nodes[current.i][current.j].visited) continue;
+            nodes[current.i][current.j].visited = true;
 
-            f_min_local = OPEN.top().f;
-            // 构建 focal 列表（f <= (1 + w) * f_min）
-            float f_limit = (1.0 + w) * f_min_local;
-            // py::print("f_limit", f_limit);
-            while (!OPEN.empty())
-            {
-                Node nd = OPEN.top();
-                OPEN.pop();
-                if (nodes[nd.i][nd.j].visited) continue; 
-                temp_nodes.push_back(nd);
-                
-                if (nd.f > f_limit) break;
-                focal.push_back(nd);
+            if (current.i == goal.first && current.j == goal.second) {
+                return get_path();
             }
 
-            for (auto &n : temp_nodes) 
-                if (!nodes[n.i][n.j].visited) OPEN.push(n); // 重新入堆
-            
-            temp_nodes.clear();
-
-            if (focal.empty()) break;
-            // 按 focal_value 排序
-            std::sort(focal.begin(), focal.end(),
-                      [](const Node &a, const Node &b)
-                      {
-                          return a.focal_value < b.focal_value;
-                      });
-
-            int choose_count = std::min((int)focal.size(), 3);
-            int idx = rand() % choose_count;
-
-            Node current = focal[idx];
-
-            nodes[current.i][current.j].visited = true;
-            if (current.i == goal.first && current.j == goal.second) return get_path();
             for (auto npos : get_neighbors({current.i, current.j}))
             {
-                Node &neighbor = nodes[npos.first][npos.second];
-                // py::print("neighbor: ", npos.first, npos.second, neighbor.visited);
-                if (neighbor.visited)
-                    continue;
+                Node &neighbor_ref = nodes[npos.first][npos.second];
+                if (neighbor_ref.visited) continue;
 
                 float cost = 1;
-                if (use_static_cost)
-                    cost = penalties[npos.first][npos.second];
-                if (use_dynamic_cost)
-                    cost += num_occupations[npos.first][npos.second];
+                if (use_static_cost) cost = penalties[npos.first][npos.second];
+                if (use_dynamic_cost) cost += num_occupations[npos.first][npos.second];
 
                 float new_g = current.g + cost;
-                float new_f = new_g + h(npos);
+                float new_h = h(npos);
+                float new_f = new_g + new_h;
 
-                if (new_g < neighbor.g)
+                if (new_f > cost_limit) continue;
+
+                if (new_g < neighbor_ref.g)
                 {
-                    neighbor.i = npos.first;
-                    neighbor.j = npos.second;
-                    neighbor.g = new_g;
-                    neighbor.h = h(npos);
-                    neighbor.f = new_f;
-
-                    neighbor.focal_value = calculate_diverse_focal_value(neighbor, goal);
-                    neighbor.parent = {current.i, current.j};
-                    OPEN.push(neighbor);
+                    neighbor_ref.i = npos.first;
+                    neighbor_ref.j = npos.second;
+                    neighbor_ref.g = new_g;
+                    neighbor_ref.h = new_h;
+                    neighbor_ref.f = new_f;
+                    neighbor_ref.parent = {current.i, current.j};
+                    
+                    neighbor_ref.focal_value = calculate_diverse_focal_value(neighbor_ref, goal);
+                    
+                    FOCAL.push(neighbor_ref);
                 }
             }
-            focal.clear();
         }
-        return std::list<std::pair<int, int>>();
+        return {};
     }
 
     void compute_focal_paths(int candidate_num = 3, int max_tries = 20, float w_min = 1.0, float w_max = 5.0)
@@ -298,11 +286,15 @@ class planner
         std::uniform_real_distribution<float> dist_w(w_min, w_max);
         std::uniform_real_distribution<float> dist_g_weight(0, 1);
         focal_paths.clear();
+        reset();
+        compute_shortest_path();
+        float c_opt = INF;
+        if(nodes[goal.first][goal.second].g < INF)  c_opt = nodes[goal.first][goal.second].g;
         while(total_tries < max_tries && path_found < candidate_num)
         {
             w = dist_w(rng);
             g_weight = dist_g_weight(rng);
-            auto path = compute_focal_path_once();
+            auto path = compute_focal_path_once(c_opt);
             if(!path.empty())
             {
                 if (!is_similar_to_existing(path, frechet_threshold))
@@ -373,7 +365,7 @@ class planner
     {
         nodes = std::vector<std::vector<Node>>(grid.size(), std::vector<Node>(grid.front().size(), Node()));
         OPEN = std::priority_queue<Node, std::vector<Node>, std::greater<Node>>();
-        Node s = Node(start.first, start.second, 0, h(start), calculate_focal_value(s, goal));
+        Node s = Node(start.first, start.second, 0, h(start));
         nodes[start.first][start.second] = s;
         OPEN.push(s);
     }
