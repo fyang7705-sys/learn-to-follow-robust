@@ -121,7 +121,9 @@ class FollowerWrapper(ObservationWrapper):
     #     # Update the previous goals and intrinsic rewards for the next step.
     #     self.prev_goals = new_goals
     #     self.intrinsic_reward = intrinsic_rewards
-
+    #     print(observations[0]['obstacles'])
+    #     print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
+    #     print("reward", self.intrinsic_reward[0])
     #     return observations
 
     def observation(self, observations):
@@ -136,23 +138,17 @@ class FollowerWrapper(ObservationWrapper):
             obs = observations[k]
             # print("candidate_paths", candidate_paths)
             if not candidate_paths:
-                new_goals.append(obs['target_xy'])
-                candidate_paths = []
+                new_goals.append([obs['target_xy']])
+            else:
+                new_goals.append([candidate_paths[i][1] for i in range(len(candidate_paths))])
 
             subgoal_achieved = False
             if self.prev_goals:
-                for path in candidate_paths:
-                    if obs['xy'] in path:
-                        subgoal_achieved = True
-                        break
+                if obs['xy'] in self.prev_goals[k]:
+                    subgoal_achieved = True
+                        
             intrinsic_rewards.append(self._cfg.intrinsic_target_reward if subgoal_achieved else 0.0)
 
-
-            if candidate_paths:
-                # 任意一条路径的第一个可行节点作为 subgoal
-                new_goals.append(candidate_paths[0][1] if len(candidate_paths[0]) > 1 else candidate_paths[0][0])
-            else:
-                new_goals.append(obs['target_xy'])
 
 
             obs['obstacles'][obs['obstacles'] > 0] *= -1
@@ -168,9 +164,11 @@ class FollowerWrapper(ObservationWrapper):
 
         self.prev_goals = new_goals
         self.intrinsic_reward = intrinsic_rewards
-        # print("pathlist", paths_list[0])
         # print(observations[0]['obstacles'])
         # print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
+        # print("pathlist", len(paths_list[0]))
+        # print("sub goal", self.prev_goals[0])
+        # print("reward", self.intrinsic_reward[0])
         return observations
 
     def get_intrinsic_rewards(self, reward):
@@ -269,7 +267,7 @@ class EncodeDataCollectionWrapper(ObservationWrapper):
         self.terminal_buffer = []
         self.window_size = config.inference_windowsize
         # self.inference_net = CNNEncoder(task_embedding_size = config.inference_net.task_embedding_size)
-        inference_net_state_dict = torch.load(config.inference_net.weight_path, map_location = torch.device('cuda'))
+        # inference_net_state_dict = torch.load(config.inference_net.weight_path, map_location = torch.device('cuda'))
         # self.inference_net.load_state_dict(inference_net_state_dict)
         # self.inference_net.eval()
         self.cfg = config

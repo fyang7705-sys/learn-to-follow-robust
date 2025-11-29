@@ -21,6 +21,7 @@ struct Node {
     {
         visited = false;
         parent = {INF, INF}; 
+        now_id = -1;
     }
     int i;
     int j;
@@ -29,6 +30,7 @@ struct Node {
     float f;
     float focal_value;
     bool visited;
+    int now_id;
     std::pair<int, int> parent;
     bool operator<(const Node& other) const
     {
@@ -71,12 +73,31 @@ class planner
     bool use_static_cost;
     bool use_dynamic_cost;
     bool reset_dynamic_cost;
+    std::mt19937 rng;
+    std::uniform_real_distribution<float> dist_w;
+    std::uniform_real_distribution<float> dist_g_weight;
     float w;
     float g_weight;
+    int current_id;
+    std::vector<std::vector<float>> diversity_map;
     inline float h(std::pair<int, int> n)
     {
         //return abs(n.first - goal.first) + abs(n.second - goal.second);
         return h_values[n.first][n.second];
+    }
+
+    inline void reset_node(Node & node)
+    {
+        if (node.now_id != current_id)
+        {
+            node.now_id = current_id;
+            node.visited = false;
+            node.parent = {INF, INF};
+            node.g = INF;
+            node.h = 0;
+            node.f = INF;
+            node.focal_value = INF;
+        }
     }
     std::vector<std::pair<int,int>> get_neighbors(std::pair<int, int> node)
     {
@@ -90,29 +111,42 @@ class planner
         }
         return neighbors;
     }
+
+
     void compute_shortest_path()
     {
+        OPEN = std::priority_queue<Node, std::vector<Node>, std::greater<Node>>();
+        // py::print("giao0");
+        reset_node(nodes[start.first][start.second]);
+        // py::print("giao1");
+        OPEN.push(Node(start.first, start.second, 0, h(start)));
         Node current;
         while(!OPEN.empty() and !(current == goal))
         {
             current = OPEN.top();
             OPEN.pop();
+            reset_node(nodes[current.i][current.j]);
             if(nodes[current.i][current.j].g < current.g)
                 continue;
+            // py::print("current", current.i, current.j);
             for(auto n: get_neighbors({current.i, current.j})) {
                 float cost(1);
+                reset_node(nodes[n.first][n.second]);
                 if(use_static_cost)
                     cost = penalties[n.first][n.second];
                 if(use_dynamic_cost)
                     cost += num_occupations[n.first][n.second];
                 if(nodes[n.first][n.second].g > current.g + cost)
                 {
+                    // py::print("neighbor", n.first, n.second, nodes[n.first][n.second].g);
                     OPEN.push(Node(n.first, n.second, current.g + cost, h(n)));
                     nodes[n.first][n.second].g = current.g + cost;
                     nodes[n.first][n.second].parent = {current.i, current.j};
                 }
             }
+
         }
+        // py::print("giao2");
     }
 
     float frechet_distance(const std::list<std::pair<int,int>>& p_list, const std::list<std::pair<int,int>>& q_list)
@@ -191,9 +225,13 @@ class planner
     {
         int grid_width =  grid.front().size();
         int grid_height = grid.size();
+        // py::print("giao0");
         float diversity = calculate_diversity_score(node);
         int max_g = grid_width + grid_height;
         float normalized_g = (max_g != 0) ? (node.g / max_g) : 0.0f;
+        // py::print("giao1");
+        // py::print("normalized_g", normalized_g, "g_weight", g_weight);
+        // py::print("diversity", diversity, "weight", 1 - g_weight);
         return g_weight * normalized_g + (1 - g_weight) * diversity;
     }
 
@@ -211,14 +249,80 @@ class planner
                 if (dist < min_dist_to_existing) min_dist_to_existing = dist;
             }        
         }
+        // py::print("mid_dist", min_dist_to_existing);
+        // py::print("node", node.i, node.j);
+        // min_dist_to_existing = diversity_map[node.i][node.j];
+        // py::print("mid_dist2", min_dist_to_existing);
+        if (min_dist_to_existing >= 99990.0f) min_dist_to_existing = 0.0f;
+        
         float max_possible_dist = std::hypot(grid_width, grid_height);
         return (max_possible_dist != 0) ? (min_dist_to_existing / max_possible_dist) : 0.0f;
     }
 
+    void update_diversity_map() 
+    {
+        int rows = grid.size();
+        int cols = grid[0].size();
+        
+        // 1. 初始化：全图设为 INF
+        for(int i = 0; i < rows; ++i) {
+            std::fill(diversity_map[i].begin(), diversity_map[i].end(), INF);
+        }
+        
+        // 2. 标记旧路径点为 0.0
+        if (focal_paths.empty()) return;
+        
+        for (const auto& path : focal_paths) {
+            for (const auto& p : path) {
+                int r = p.first + abs_offset.first;
+                int c = p.second + abs_offset.second;
+                if (r >= 0 && r < rows && c >= 0 && c < cols) {
+                    diversity_map[r][c] = 0.0f;
+                }
+            }
+        }
 
+        // 预定义代价：直向 1.0，斜向 1.414
+        const float d1 = 1.0f;
+        const float d2 = 1.41421f;
+
+        // 3. 第一遍扫描 (Pass 1): 左上 -> 右下
+        // 检查方向：左(L), 左上(TL), 上(T), 右上(TR)
+        for(int i = 0; i < rows; ++i) {
+            for(int j = 0; j < cols; ++j) {
+                if (diversity_map[i][j] == 0.0f) continue;
+
+                float min_val = INF;
+                
+                if (i > 0)          min_val = std::min(min_val, diversity_map[i-1][j] + d1); // 上
+                if (j > 0)          min_val = std::min(min_val, diversity_map[i][j-1] + d1); // 左
+                if (i > 0 && j > 0) min_val = std::min(min_val, diversity_map[i-1][j-1] + d2); // 左上
+                if (i > 0 && j < cols - 1) min_val = std::min(min_val, diversity_map[i-1][j+1] + d2); // 右上
+
+                diversity_map[i][j] = min_val;
+            }
+        }
+
+        // 4. 第二遍扫描 (Pass 2): 右下 -> 左上
+        // 检查方向：右(R), 右下(BR), 下(B), 左下(BL)
+        for(int i = rows - 1; i >= 0; --i) {
+            for(int j = cols - 1; j >= 0; --j) {
+                if (diversity_map[i][j] == 0.0f) continue;
+
+                float min_val = diversity_map[i][j];
+
+                if (i < rows - 1)   min_val = std::min(min_val, diversity_map[i+1][j] + d1); // 下
+                if (j < cols - 1)   min_val = std::min(min_val, diversity_map[i][j+1] + d1); // 右
+                if (i < rows - 1 && j < cols - 1) min_val = std::min(min_val, diversity_map[i+1][j+1] + d2); // 右下
+                if (i < rows - 1 && j > 0) min_val = std::min(min_val, diversity_map[i+1][j-1] + d2); // 左下
+
+                diversity_map[i][j] = min_val;
+            }
+        }
+    }
     std::list<std::pair<int, int>> compute_focal_path_once(float optimal_cost)
     {
-        reset(); 
+        reset();
         if (optimal_cost >= INF) {
             return {};
         }
@@ -228,9 +332,17 @@ class planner
         std::priority_queue<Node, std::vector<Node>, CompareFocal> FOCAL;
 
         Node &start_node = nodes[start.first][start.second];
-        start_node.focal_value = calculate_diverse_focal_value(start_node, goal);
         
-        FOCAL.push(start_node);
+        reset_node(start_node); // 更新 ID，重置状态
+        start_node.i = start.first;
+        start_node.j = start.second;
+        start_node.g = 0;       // 起点代价为 0
+        start_node.h = h(start);
+        start_node.f = start_node.g + start_node.h;
+        // start_node.focal_value = calculate_diverse_focal_value(start_node, goal);
+        start_node.focal_value = calculate_focal_value(start_node, goal);
+        
+        FOCAL.push(Node(start.first, start.second, 0, h(start), start_node.focal_value));
 
         while (!FOCAL.empty())
         {
@@ -247,6 +359,8 @@ class planner
             for (auto npos : get_neighbors({current.i, current.j}))
             {
                 Node &neighbor_ref = nodes[npos.first][npos.second];
+                reset_node(neighbor_ref);
+
                 if (neighbor_ref.visited) continue;
 
                 float cost = 1;
@@ -268,23 +382,23 @@ class planner
                     neighbor_ref.f = new_f;
                     neighbor_ref.parent = {current.i, current.j};
                     
-                    neighbor_ref.focal_value = calculate_diverse_focal_value(neighbor_ref, goal);
-                    
-                    FOCAL.push(neighbor_ref);
+                    // neighbor_ref.focal_value = calculate_diverse_focal_value(neighbor_ref, goal);
+                    neighbor_ref.focal_value = calculate_focal_value(neighbor_ref, goal);
+                    FOCAL.push(Node(npos.first, npos.second, new_g, new_h, neighbor_ref.focal_value));
                 }
             }
         }
         return {};
     }
 
-    void compute_focal_paths(int candidate_num = 3, int max_tries = 20, float w_min = 1.0, float w_max = 5.0)
+    void compute_focal_paths(int candidate_num = 3, int max_tries = 5, float w_min = 1.0, float w_max = 3.0)
     {
         int total_tries = 0;
         int path_found = 0;
         float frechet_threshold = 3.0;
-        std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
-        std::uniform_real_distribution<float> dist_w(w_min, w_max);
-        std::uniform_real_distribution<float> dist_g_weight(0, 1);
+
+        using param_t = std::uniform_real_distribution<float>::param_type;
+        dist_w.param(param_t(w_min, w_max));
         focal_paths.clear();
         reset();
         compute_shortest_path();
@@ -294,9 +408,13 @@ class planner
         {
             w = dist_w(rng);
             g_weight = dist_g_weight(rng);
+            // if(!focal_paths.empty()) update_diversity_map();
+
             auto path = compute_focal_path_once(c_opt);
             if(!path.empty())
             {
+                // focal_paths.push_back(path);
+                // path_found++;
                 if (!is_similar_to_existing(path, frechet_threshold))
                 {
                     focal_paths.push_back(path);
@@ -363,11 +481,7 @@ class planner
 
     void reset()
     {
-        nodes = std::vector<std::vector<Node>>(grid.size(), std::vector<Node>(grid.front().size(), Node()));
-        OPEN = std::priority_queue<Node, std::vector<Node>, std::greater<Node>>();
-        Node s = Node(start.first, start.second, 0, h(start));
-        nodes[start.first][start.second] = s;
-        OPEN.push(s);
+        current_id++;
     }
 
 public:
@@ -377,9 +491,13 @@ public:
         abs_offset = {0, 0};
         goal = {0,0};
         start = {0, 0};
+        current_id = 0;
         nodes = std::vector<std::vector<Node>>(grid.size(), std::vector<Node>(grid.front().size(), Node()));
         num_occupations = std::vector<std::vector<float>>(grid.size(), std::vector<float>(grid.front().size(), 0));
         penalties = std::vector<std::vector<float>>(grid.size(), std::vector<float>(grid.front().size(), 1));
+        rng.seed(std::chrono::steady_clock::now().time_since_epoch().count());
+        dist_g_weight = std::uniform_real_distribution<float>(0, 1);
+        diversity_map = std::vector<std::vector<float>>(grid.size(), std::vector<float>(grid.front().size(), 0));
     }
 
     std::vector<std::vector<float>> get_num_occupied_matrix()
