@@ -28,11 +28,12 @@ class PreprocessorConfig(PlannerConfig):
     network_input_radius: int = 5
     intrinsic_target_reward: float = 0.01
     use_latent_embedding: bool = True
+    latent_size: int = 1
     inference_windowsize: int = 5
     inference_net: InferenceNetConfig = InferenceNetConfig(
         weight_path="model/follower-robust/checkpoint/encoder/encoder_20251118_065830_762916.pt",
         hidden_size=64,
-        task_embedding_size=1,
+        task_embedding_size=1024,
         action_size=1,
         reward_size=1,
         term_size=1,
@@ -148,9 +149,6 @@ class FollowerWrapper(ObservationWrapper):
                     subgoal_achieved = True
                         
             intrinsic_rewards.append(self._cfg.intrinsic_target_reward if subgoal_achieved else 0.0)
-
-
-
             obs['obstacles'][obs['obstacles'] > 0] *= -1
             r = obs['obstacles'].shape[0] // 2
 
@@ -272,7 +270,7 @@ class EncodeDataCollectionWrapper(ObservationWrapper):
         # self.inference_net.eval()
         self.cfg = config
         self.bug_prob = env.bug_prob
-        self.env.observation_space['latent'] = Box(low=-np.inf, high=np.inf, shape=(config.inference_net.task_embedding_size,), dtype=np.float32,)
+        self.env.observation_space['latent'] = Box(low=-np.inf, high=np.inf, shape=(config.latent_size,), dtype=np.float32,)
         # log.warning(f"config.inference_net.task_embedding_size: {config.inference_net.task_embedding_size}")
         
     def step(self, action):
@@ -334,15 +332,16 @@ class EncodeDataCollectionWrapper(ObservationWrapper):
             # with torch.no_grad():
             #     z = self.inference_net(obs_t, act_t, rew_t, term_t)
             #     z = z.cpu().numpy()  # (B, embedding_size)
-            z = self.bug_prob
-            # log.info(f"z:{z}") 
-            # log.error(f"self.inference_net.task_embedding_size{self.inference_net.task_embedding_size}")
+            
+            
+            # normalize
+            z = 2 * (self.bug_probs[-1] - self.bug_prob) / (self.bug_probs[-1] - self.bug_probs[0]) - 1
             # put into observations
             for i in range(len(observations)):
                 observations[i]['latent'] = np.array([z], dtype=np.float32)
         else:
             for i in range(len(observations)):
-                observations[i]['latent'] = np.zeros((self.cfg.inference_net.task_embedding_size,))
+                observations[i]['latent'] = np.zeros((self.cfg.latent_size,))
         return observations
     
     def reset(self, **kwargs):

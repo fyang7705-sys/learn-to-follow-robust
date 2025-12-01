@@ -166,6 +166,11 @@ class ResnetEncoder_context(Encoder):
             # log.error('encoder_out_sizeeeeee: %r' + '='*100, self.encoder_out_size)
             self.encoder_out_size += self.preprocess_cfg.inference_net.task_embedding_size
             # log.error('encoder_out_size: %r' + '='*100, self.encoder_out_size)
+            self.latent_linear = nn.Sequential(
+                nn.Linear(self.preprocess_cfg.latent_size, self.preprocess_cfg.inference_net.task_embedding_size),
+                activation_func(self.encoder_cfg),
+            )
+            
             self.extra_linear = nn.Sequential(
                 nn.Linear(self.encoder_out_size, self.encoder_cfg.hidden_size),
                 activation_func(self.encoder_cfg),
@@ -191,6 +196,7 @@ class ResnetEncoder_context(Encoder):
         x = x.contiguous().view(-1, self.conv_head_out_size)
 
         if self.preprocess_cfg.use_latent_embedding:
+            z = self.latent_linear(z)
             x = torch.cat([x, z], dim=-1)
             x = self.extra_linear(x)
         elif self.encoder_cfg.extra_fc_layers:
