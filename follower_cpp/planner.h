@@ -339,8 +339,8 @@ class planner
         start_node.g = 0;       // 起点代价为 0
         start_node.h = h(start);
         start_node.f = start_node.g + start_node.h;
-        // start_node.focal_value = calculate_diverse_focal_value(start_node, goal);
-        start_node.focal_value = calculate_focal_value(start_node, goal);
+        start_node.focal_value = calculate_diverse_focal_value(start_node, goal);
+        // start_node.focal_value = calculate_focal_value(start_node, goal);
         
         FOCAL.push(Node(start.first, start.second, 0, h(start), start_node.focal_value));
 
@@ -382,8 +382,8 @@ class planner
                     neighbor_ref.f = new_f;
                     neighbor_ref.parent = {current.i, current.j};
                     
-                    // neighbor_ref.focal_value = calculate_diverse_focal_value(neighbor_ref, goal);
-                    neighbor_ref.focal_value = calculate_focal_value(neighbor_ref, goal);
+                    neighbor_ref.focal_value = calculate_diverse_focal_value(neighbor_ref, goal);
+                    // neighbor_ref.focal_value = calculate_focal_value(neighbor_ref, goal);
                     FOCAL.push(Node(npos.first, npos.second, new_g, new_h, neighbor_ref.focal_value));
                 }
             }
