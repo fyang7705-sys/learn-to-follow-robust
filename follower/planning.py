@@ -25,7 +25,7 @@ class Planner:
         self.starts = None
         self.cfg = cfg
         self.results = None
-        self.replan_window = 5
+        self.replan_window = 4
         self.replan_counts = None
 
     def add_grid_obstacles(self, obstacles, starts):
