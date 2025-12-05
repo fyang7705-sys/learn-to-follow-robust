@@ -190,7 +190,7 @@ class ResnetEncoder_context(Encoder):
         return self.encoder_out_size
 
     def forward(self, x):
-        z = x['latent']
+        z = x.get("latent")
         x = x['obs']
         x = self.conv_head(x)
         x = x.contiguous().view(-1, self.conv_head_out_size)
