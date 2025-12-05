@@ -11,13 +11,12 @@ try:
     from typing import Literal
 except ImportError:
     from typing_extensions import Literal
-
+import numpy as np
 
 class PlannerConfig(BaseModel):
     use_static_cost: bool = True
     use_dynamic_cost: bool = True
     reset_dynamic_cost: bool = True
-
 
 class Planner:
     def __init__(self, cfg: PlannerConfig):
@@ -25,12 +24,17 @@ class Planner:
         self.obstacles = None
         self.starts = None
         self.cfg = cfg
+        self.results = None
+        self.replan_window = 5
+        self.replan_counts = None
 
     def add_grid_obstacles(self, obstacles, starts):
         self.obstacles = obstacles
         self.starts = starts
         self.planner = None
-
+        self.results = None
+        self.replan_counts = np.zeros((len(self.starts),))
+        
     def update(self, obs):
         num_agents = len(obs)
         obs_radius = len(obs[0]['obstacles']) // 2
@@ -50,14 +54,27 @@ class Planner:
             obs[k]['agents'][obs_radius][obs_radius] = 0
             self.planner[k].update_occupations(obs[k]['agents'], (obs[k]['xy'][0] - obs_radius, obs[k]['xy'][1] - obs_radius), obs[k]['target_xy'])
             obs[k]['agents'][obs_radius][obs_radius] = 1
-            self.planner[k].update_focal_paths(obs[k]['xy'], obs[k]['target_xy'])
-            # self.planner[k].update_path(obs[k]['xy'], obs[k]['target_xy'])
+            if self.if_replan(k, obs[k]):
+                self.planner[k].update_focal_paths(obs[k]['xy'], obs[k]['target_xy'])
+                # self.planner[k].update_path(obs[k]['xy'], obs[k]['target_xy'])
+            self.replan_counts[k] += 1
+
+    def if_replan(self, agent_index, agent_obs):
+        if self.replan_counts[agent_index] % self.replan_window == 0:
+            return True
+        cur_goal = list(self.results[agent_index][0][-1]) if self.results[agent_index][0] else obs[agent_index]['target_xy']
+        # print("cur_goal", cur_goal)
+        # print("agent_obs['xy']", agent_obs['xy'])
+        if agent_obs['xy'] == cur_goal:
+            return True
+        return False
+
     def get_path(self):
-        results = []
+        self.results = []
         for idx in range(len(self.planner)):
-            results.append(self.planner[idx].get_focal_paths())
+            self.results.append(self.planner[idx].get_focal_paths())
             # results.append(self.planner[idx].get_path())
-        return results
+        return self.results
 
 
 class ResettablePlanner:

@@ -72,6 +72,7 @@ class FollowerWrapper(ObservationWrapper):
         self._cfg: PreprocessorConfig = config
         self.re_plan = ResettablePlanner(self._cfg)
         self.prev_goals = None
+        self.prev_pos = None
         self.intrinsic_reward = None
 
     @staticmethod
@@ -122,9 +123,9 @@ class FollowerWrapper(ObservationWrapper):
     #     # Update the previous goals and intrinsic rewards for the next step.
     #     self.prev_goals = new_goals
     #     self.intrinsic_reward = intrinsic_rewards
-    #     print(observations[0]['obstacles'])
-    #     print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
-    #     print("reward", self.intrinsic_reward[0])
+    #     # print(observations[0]['obstacles'])
+    #     # print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
+    #     # print("reward", self.intrinsic_reward[0])
     #     return observations
 
     def observation(self, observations):
@@ -133,22 +134,39 @@ class FollowerWrapper(ObservationWrapper):
         paths_list = self.re_plan.get_path()  
 
         new_goals = []
+        new_pos = []
         intrinsic_rewards = []
         # print("path_list", paths_list)    
         for k, candidate_paths in enumerate(paths_list):
             obs = observations[k]
+            new_pos.append(obs['xy'])
             # print("candidate_paths", candidate_paths)
+            for index, path in enumerate(candidate_paths): # 路径截断
+                if obs['xy'] in path:
+                    candidate_paths[index] = path[path.index(obs['xy']):]
+
+            candidate_paths.sort(key=lambda x: len(x))
             if not candidate_paths:
                 new_goals.append([obs['target_xy']])
             else:
-                new_goals.append([candidate_paths[i][1] for i in range(len(candidate_paths))])
+                new_goals.append([p[1] if len(p) > 1 else p[0] for p in candidate_paths])
 
             subgoal_achieved = False
             if self.prev_goals:
                 if obs['xy'] in self.prev_goals[k]:
                     subgoal_achieved = True
+                    path_index = self.prev_goals[k].index(obs['xy'])
                         
-            intrinsic_rewards.append(self._cfg.intrinsic_target_reward if subgoal_achieved else 0.0)
+            # intrinsic_rewards.append(self._cfg.intrinsic_target_reward if subgoal_achieved else 0.0)
+            if subgoal_achieved:
+                # reward = self._cfg.intrinsic_target_reward * 2 if path_index == 0 else self._cfg.intrinsic_target_reward
+                reward = self._cfg.intrinsic_target_reward
+            else:
+                reward = 0.0
+            # if self.prev_pos:
+            #     if new_pos[k] == self.prev_pos[k]: # reverse penalty
+            #         reward -= self._cfg.intrinsic_target_reward
+            intrinsic_rewards.append(reward)
             obs['obstacles'][obs['obstacles'] > 0] *= -1
             r = obs['obstacles'].shape[0] // 2
 
@@ -160,6 +178,7 @@ class FollowerWrapper(ObservationWrapper):
                     else:
                         break
 
+        self.prev_pos = new_pos
         self.prev_goals = new_goals
         self.intrinsic_reward = intrinsic_rewards
         # print(observations[0]['obstacles'])

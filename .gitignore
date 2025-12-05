@@ -172,3 +172,7 @@ robust-experiments/train_dir/
 
 # cpp import
 !follower_cpp/planner.cpython-38-x86_64-linux-gnu.so
+
+*.txt
+*.diff
+events.out.tfevents*
