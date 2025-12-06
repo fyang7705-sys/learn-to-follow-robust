@@ -7,9 +7,12 @@ environment:
   map_name: den520d
   num_agents:
     grid_search: [256 ]
+    # grid_search: [4]
   seed:
+    # grid_search: [0]
     grid_search: [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 ]
   custom_bug_prob:
+    # grid_search: [0.0]
     grid_search: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 algorithms:
   Follower:
@@ -18,12 +21,73 @@ algorithms:
     parallel_backend: 'balanced_dask'
   #   run_episode_func: 'collect_data'
     # custom_path_to_weight: model/follower
-  
-  FollowerRobust:
+
+  focal_taskembeddingsize_1024:
     name: FollowerRobust
     num_process: 64
     parallel_backend: 'balanced_dask'
-    custom_path_to_weights: "model/follower-robust/checkpoint/best_000027904_457179136_avg_throughput_1.687.pth"
+    path_to_weights: "taskembedding_size-experiments/1024/focal/train_dir/exp"
+ 
+  astar_taskembeddingsize_1024:
+    name: FollowerRobust
+    num_process: 64
+    parallel_backend: 'balanced_dask'
+    path_to_weights: "taskembedding_size-experiments/1024/astar/train_dir/exp"
+
+  diversefocal_taskembeddingsize_1024:
+    name: FollowerRobust
+    num_process: 64
+    parallel_backend: 'balanced_dask'
+    path_to_weights: "taskembedding_size-experiments/1024/diversefocal/train_dir/exp"
+
+  astar_taskembeddingsize_0:
+    name: FollowerRobust
+    num_process: 64
+    parallel_backend: 'balanced_dask'
+    path_to_weights: "taskembedding_size-experiments/0/astar/train_dir/exp"
+
+  focal_taskembeddingsize_0:
+    name: FollowerRobust
+    num_process: 64
+    parallel_backend: 'balanced_dask'
+    path_to_weights: "taskembedding_size-experiments/0/focal/train_dir/exp"
+
+  diversefocal_taskembeddingsize_1_length_reward:
+    name: FollowerRobust
+    num_process: 64
+    parallel_backend: 'balanced_dask'
+    path_to_weights: "focal_reward-experiments/taskembedding_size_1/diversefocal/length_reward/train_dir/exp"
+  
+  diversefocal_taskembeddingsize_1024_length_reward:
+    name: FollowerRobust
+    num_process: 64
+    parallel_backend: 'balanced_dask'
+    path_to_weights: "focal_reward-experiments/taskembedding_size_1024/diversefocal/length_reward/train_dir/exp"
+
+  diversefocal_taskembeddingsize_1024_planwindow_4:
+    name: FollowerRobust
+    num_process: 64
+    parallel_backend: 'balanced_dask'
+    path_to_weights: "focal_reward-experiments/taskembedding_size_1024/diversefocal/planwindow_4/train_dir/exp"
+  
+  diversefocal_taskembeddingsize_1024_planwindow_5:
+    name: FollowerRobust
+    num_process: 64
+    parallel_backend: 'balanced_dask'
+    path_to_weights: "focal_reward-experiments/taskembedding_size_1024/diversefocal/planwindow_5/train_dir/exp"
+  
+  diversefocal_taskembeddingsize_1024_reverse_penalty:
+    name: FollowerRobust
+    num_process: 64
+    parallel_backend: 'balanced_dask'
+    path_to_weights: "focal_reward-experiments/taskembedding_size_1024/diversefocal/reverse_penalty/train_dir/exp"
+
+  # FollowerRobust:
+  #   name: FollowerRobust
+  #   num_process: 4
+  #   parallel_backend: 'balanced_dask'
+  #   custom_path_to_weights: "model/follower-robust/checkpoint/best_000027904_457179136_avg_throughput_1.687.pth"
+results_views: 
   TabularResults:
     type: tabular
     drop_keys: [ seed ]
@@ -33,12 +97,12 @@ algorithms:
     type: plot
     x: custom_bug_prob
     y: avg_throughput
-    width: 2.5
-    height: 2.5
+    width: 15
+    height: 15
     line_width: 2
     use_log_scale_x: False
     legend_font_size: 8
     font_size: 8
-    hue_order: [ FollowerRobust, Follower]
+    hue_order: [ Follower, astar_taskembeddingsize_1024, focal_taskembeddingsize_1024, diversefocal_taskembeddingsize_1024, diversefocal_taskembeddingsize_1024_length_reward, diversefocal_taskembeddingsize_1024_planwindow_4, diversefocal_taskembeddingsize_1024_planwindow_5, diversefocal_taskembeddingsize_1024_reverse_penalty, astar_taskembeddingsize_0, focal_taskembeddingsize_0, diversefocal_taskembeddingsize_1_length_reward ]
     name: den520d $64 \times 64$
     ticks: [ 0.0, 0.1, 0.2, 0.3, 0.4, 0.5]

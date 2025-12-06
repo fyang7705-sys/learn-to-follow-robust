@@ -9,7 +9,11 @@ from follower.planning import ResettablePlanner, PlannerConfig
 from follower_robust.encoder import CNNEncoder
 from typing import List
 from sample_factory.utils.utils import log
-
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal
+    
 class InferenceNetConfig(BaseModel):
     weight_path: str
     hidden_size: int
@@ -25,6 +29,8 @@ class InferenceNetConfig(BaseModel):
 
 
 class PreprocessorConfig(PlannerConfig):
+    reward_type: Literal['normal_reward', 'length_reward'] = "normal_reward"
+    reverse_penalty: bool = False
     network_input_radius: int = 5
     intrinsic_target_reward: float = 0.01
     use_latent_embedding: bool = True
@@ -82,53 +88,55 @@ class FollowerWrapper(ObservationWrapper):
             return None, None
         return obs_radius - dx, obs_radius - dy
 
-    # def observation(self, observations):
-    #     # Update cost penalties based on the current observations, independently for each agent.
-    #     self.re_plan.update(observations)
+    def observation_astar(self, observations):
+        # Update cost penalties based on the current observations, independently for each agent.
+        self.re_plan.update(observations)
 
-    #     # Retrieve the shortest path to the global target for each agent.
-    #     paths = self.re_plan.get_path()
+        # Retrieve the shortest path to the global target for each agent.
+        paths = self.re_plan.get_path()
 
-    #     new_goals = []  # Initialize a list to store new goals for each agent.
-    #     intrinsic_rewards = []  # Initialize a list to store intrinsic rewards for each agent.
+        new_goals = []  # Initialize a list to store new goals for each agent.
+        intrinsic_rewards = []  # Initialize a list to store intrinsic rewards for each agent.
 
-    #     # Iterate through agents and their respective paths.
-    #     for k, path in enumerate(paths):
-    #         obs = observations[k]
+        # Iterate through agents and their respective paths.
+        for k, path in enumerate(paths):
+            obs = observations[k]
 
-    #         # Check if there is no valid path available.
-    #         if path is None:
-    #             new_goals.append(obs['target_xy'])  # Use the target position as a new goal.
-    #             path = []
-    #         else:
-    #             # Check if the agent reached their subgoal from its previous step
-    #             subgoal_achieved = self.prev_goals and obs['xy'] == self.prev_goals[k]
-    #             # Assign an intrinsic reward if conditions are met, otherwise set it to 0.
-    #             intrinsic_rewards.append(self._cfg.intrinsic_target_reward if subgoal_achieved else 0.0)
-    #             # Select a new target point.
-    #             new_goals.append(path[1])
+            # Check if there is no valid path available.
+            if path is None:
+                new_goals.append(obs['target_xy'])  # Use the target position as a new goal.
+                path = []
+            else:
+                # Check if the agent reached their subgoal from its previous step
+                subgoal_achieved = self.prev_goals and obs['xy'] == self.prev_goals[k]
+                # Assign an intrinsic reward if conditions are met, otherwise set it to 0.
+                intrinsic_rewards.append(self._cfg.intrinsic_target_reward if subgoal_achieved else 0.0)
+                # Select a new target point.
+                new_goals.append(path[1])
 
-    #         # Set obstacle values to -1.0 in the observation.
-    #         obs['obstacles'][obs['obstacles'] > 0] *= -1
+            # Set obstacle values to -1.0 in the observation.
+            obs['obstacles'][obs['obstacles'] > 0] *= -1
 
-    #         # Adding path to the observation, setting path values to +1.0.
-    #         r = obs['obstacles'].shape[0] // 2
-    #         for idx, (gx, gy) in enumerate(path):
-    #             x, y = self.get_relative_xy(*obs['xy'], gx, gy, r)
-    #             if x is not None and y is not None:
-    #                 obs['obstacles'][x, y] = 1.0
-    #             else:
-    #                 break
-    #         # print(obs['obstacles'])
-    #     # Update the previous goals and intrinsic rewards for the next step.
-    #     self.prev_goals = new_goals
-    #     self.intrinsic_reward = intrinsic_rewards
-    #     # print(observations[0]['obstacles'])
-    #     # print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
-    #     # print("reward", self.intrinsic_reward[0])
-    #     return observations
+            # Adding path to the observation, setting path values to +1.0.
+            r = obs['obstacles'].shape[0] // 2
+            for idx, (gx, gy) in enumerate(path):
+                x, y = self.get_relative_xy(*obs['xy'], gx, gy, r)
+                if x is not None and y is not None:
+                    obs['obstacles'][x, y] = 1.0
+                else:
+                    break
+            # print(obs['obstacles'])
+        # Update the previous goals and intrinsic rewards for the next step.
+        self.prev_goals = new_goals
+        self.intrinsic_reward = intrinsic_rewards
+        # print(observations[0]['obstacles'])
+        # print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
+        # print("reward", self.intrinsic_reward[0])
+        return observations
 
     def observation(self, observations):
+        if self._cfg.path_planner == 'astar':
+            return self.observation_astar(observations)
         self.re_plan.update(observations)
         
         paths_list = self.re_plan.get_path()  
@@ -159,13 +167,15 @@ class FollowerWrapper(ObservationWrapper):
                         
             # intrinsic_rewards.append(self._cfg.intrinsic_target_reward if subgoal_achieved else 0.0)
             if subgoal_achieved:
-                # reward = self._cfg.intrinsic_target_reward * 2 if path_index == 0 else self._cfg.intrinsic_target_reward
-                reward = self._cfg.intrinsic_target_reward
+                if self._cfg.reward_type == "normal_reward":
+                    reward = self._cfg.intrinsic_target_reward
+                else:  # length_reward
+                    reward = self._cfg.intrinsic_target_reward * 2 if path_index == 0 else self._cfg.intrinsic_target_reward
             else:
                 reward = 0.0
-            # if self.prev_pos:
-            #     if new_pos[k] == self.prev_pos[k]: # reverse penalty
-            #         reward -= self._cfg.intrinsic_target_reward
+            if self.prev_pos and self._cfg.reverse_penalty:
+                if new_pos[k] == self.prev_pos[k]:  # reverse penalty
+                    reward -= self._cfg.intrinsic_target_reward
             intrinsic_rewards.append(reward)
             obs['obstacles'][obs['obstacles'] > 0] *= -1
             r = obs['obstacles'].shape[0] // 2

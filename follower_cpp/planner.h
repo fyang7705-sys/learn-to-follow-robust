@@ -73,6 +73,7 @@ class planner
     bool use_static_cost;
     bool use_dynamic_cost;
     bool reset_dynamic_cost;
+    bool use_dfocal;
     std::mt19937 rng;
     std::uniform_real_distribution<float> dist_w;
     std::uniform_real_distribution<float> dist_g_weight;
@@ -339,9 +340,11 @@ class planner
         start_node.g = 0;       // 起点代价为 0
         start_node.h = h(start);
         start_node.f = start_node.g + start_node.h;
-        start_node.focal_value = calculate_diverse_focal_value(start_node, goal);
-        // start_node.focal_value = calculate_focal_value(start_node, goal);
-        
+        if (use_dfocal)
+            start_node.focal_value = calculate_diverse_focal_value(start_node, goal);
+        else
+            start_node.focal_value = calculate_focal_value(start_node, goal);
+
         FOCAL.push(Node(start.first, start.second, 0, h(start), start_node.focal_value));
 
         while (!FOCAL.empty())
@@ -381,9 +384,10 @@ class planner
                     neighbor_ref.h = new_h;
                     neighbor_ref.f = new_f;
                     neighbor_ref.parent = {current.i, current.j};
-                    
-                    neighbor_ref.focal_value = calculate_diverse_focal_value(neighbor_ref, goal);
-                    // neighbor_ref.focal_value = calculate_focal_value(neighbor_ref, goal);
+                    if (use_dfocal)
+                        neighbor_ref.focal_value = calculate_diverse_focal_value(neighbor_ref, goal);
+                    else
+                        neighbor_ref.focal_value = calculate_focal_value(neighbor_ref, goal);
                     FOCAL.push(Node(npos.first, npos.second, new_g, new_h, neighbor_ref.focal_value));
                 }
             }
@@ -485,8 +489,8 @@ class planner
     }
 
 public:
-    planner(std::vector<std::vector<int>> _grid={}, float _use_static_cost=1.0, float _use_dynamic_cost=1.0, bool _reset_dynamic_cost=true):
-    grid(_grid), use_static_cost(_use_static_cost), use_dynamic_cost(_use_dynamic_cost), reset_dynamic_cost(_reset_dynamic_cost)
+    planner(std::vector<std::vector<int>> _grid={}, float _use_static_cost=1.0, float _use_dynamic_cost=1.0, bool _reset_dynamic_cost=true, bool _use_dfocal=true):
+    grid(_grid), use_static_cost(_use_static_cost), use_dynamic_cost(_use_dynamic_cost), reset_dynamic_cost(_reset_dynamic_cost), use_dfocal(_use_dfocal)
     {
         abs_offset = {0, 0};
         goal = {0,0};

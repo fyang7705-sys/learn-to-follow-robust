@@ -17,6 +17,8 @@ class PlannerConfig(BaseModel):
     use_static_cost: bool = True
     use_dynamic_cost: bool = True
     reset_dynamic_cost: bool = True
+    planwindow: int = 1
+    path_planner: Literal['diversefocal', 'focal', 'astar'] = "astar"
 
 class Planner:
     def __init__(self, cfg: PlannerConfig):
@@ -25,7 +27,7 @@ class Planner:
         self.starts = None
         self.cfg = cfg
         self.results = None
-        self.replan_window = 4
+        self.replan_window = cfg.planwindow
         self.replan_counts = None
 
     def add_grid_obstacles(self, obstacles, starts):
@@ -55,8 +57,10 @@ class Planner:
             self.planner[k].update_occupations(obs[k]['agents'], (obs[k]['xy'][0] - obs_radius, obs[k]['xy'][1] - obs_radius), obs[k]['target_xy'])
             obs[k]['agents'][obs_radius][obs_radius] = 1
             if self.if_replan(k, obs[k]):
-                self.planner[k].update_focal_paths(obs[k]['xy'], obs[k]['target_xy'])
-                # self.planner[k].update_path(obs[k]['xy'], obs[k]['target_xy'])
+                if self.cfg.path_planner == "astar":
+                    self.planner[k].update_path(obs[k]['xy'], obs[k]['target_xy'])
+                else:
+                    self.planner[k].update_focal_paths(obs[k]['xy'], obs[k]['target_xy'])
             self.replan_counts[k] += 1
 
     def if_replan(self, agent_index, agent_obs):
@@ -72,8 +76,10 @@ class Planner:
     def get_path(self):
         self.results = []
         for idx in range(len(self.planner)):
-            self.results.append(self.planner[idx].get_focal_paths())
-            # results.append(self.planner[idx].get_path())
+            if self.cfg.path_planner == "astar":
+                self.results.append(self.planner[idx].get_path())
+            else:
+                self.results.append(self.planner[idx].get_focal_paths())
         return self.results
 
 

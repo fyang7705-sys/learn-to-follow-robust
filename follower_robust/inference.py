@@ -65,10 +65,10 @@ class FollowerInferenceRobust:
         config = flat_config
 
         config.num_envs = 1
-        self.save_json = config.save_json
-        if self.save_json:
-            self.save_dir = config.save_dir
-            Path(config.save_dir).mkdir(parents=True, exist_ok=True)
+        # self.save_json = config.save_json
+        # if self.save_json:
+        #     self.save_dir = config.save_dir
+        #     Path(config.save_dir).mkdir(parents=True, exist_ok=True)
         env = make_env_func_batched(config, env_config=AttrDict(worker_index=0, vector_index=0, env_id=0))
         # print(f"config: {config}\n")
         # print(f"env.observation_space: {env.observation_space}\n")
@@ -86,16 +86,20 @@ class FollowerInferenceRobust:
             log.warning('CUDA is not available, using CPU. This might be slow.')
 
         actor_critic.model_to_device(device)
-        name_prefix = dict(latest="checkpoint", best="best")['latest']
+        name_prefix = dict(latest="checkpoint", best="best")['best']
         policy_index = 0 if 'policy_index' not in flat_config else flat_config.policy_index
 
-        checkpoints = Learner.get_checkpoints(os.path.join(self.path, f"checkpoint_p{policy_index}"),
+        checkpoint = Learner.get_checkpoints(os.path.join(self.path, f"checkpoint_p{policy_index}"),
                                               f"{name_prefix}_*")
 
         if self.algo_cfg.custom_path_to_weights:
             log.info(f"custom_path_to_weights:{self.algo_cfg.custom_path_to_weights}")
-            checkpoint = torch.load(self.algo_cfg.custom_path_to_weights, map_location="cpu")
-        actor_critic.load_state_dict(checkpoint['model'])        
+            checkpoint = self.algo_cfg.custom_path_to_weights
+            # checkpoint = torch.load(self.algo_cfg.custom_path_to_weights, map_location="cpu")
+
+        checkpoint_dict = Learner.load_checkpoint(checkpoint, device)
+        actor_critic.load_state_dict(checkpoint_dict['model'])
+        # actor_critic.load_state_dict(checkpoint['model'])        
         self.net = actor_critic
         self.device = device
         self.cfg = config
@@ -134,8 +138,8 @@ class FollowerInferenceRobust:
             # log.error(f"normalized_obs{normalized_obs}")
             # print("normalized_obs shape", {k: v.shape for k, v in normalized_obs.items()})
             policy_outputs = self.net(normalized_obs, self.rnn_states)
-            if self.save_json:
-                self.collect_data(normalized_obs, self.rnn_states, policy_outputs)
+            # if self.save_json:
+            #     self.collect_data(normalized_obs, self.rnn_states, policy_outputs)
         # print(f"observations after prepare_and_normalize_obs:{obs}\n")
         self.rnn_states = policy_outputs['new_rnn_states']
         # print(f"policy_outputs:, {policy_outputs}\n")

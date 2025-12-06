@@ -3,7 +3,7 @@
   "algo": "APPO",
   "env": "PogemaMazes-v0",
   "experiment": "exp",
-  "train_dir": "focal_reward-experiments/reverse_penalty/taskembedding_size_1024/train_dir",
+  "train_dir": "focal_reward-experiments/taskembedding_size_1/diversefocal/train_dir",
   "restart_behavior": "overwrite",
   "device": "gpu",
   "seed": 42,
@@ -198,6 +198,10 @@
     "hidden_size": 512
   },
   "preprocessing": {
+    "path_planner": "diversefocal",
+    "reward_type": "length_reward",
+    "reverse_penalty": false,
+    "planwindow": 1,
     "use_static_cost": true,
     "use_dynamic_cost": true,
     "reset_dynamic_cost": true,
@@ -209,7 +213,7 @@
     "inference_net": {
       "weight_path": "model/follower-robust/checkpoint/encoder/encoder_20251118_065830_762916.pt",
       "hidden_size": 64,
-      "task_embedding_size": 1024,
+      "task_embedding_size": 1,
       "action_size": 1,
       "reward_size": 1,
       "term_size": 1,

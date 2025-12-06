@@ -198,6 +198,10 @@
     "hidden_size": 512
   },
   "preprocessing": {
+    "path_planner": "astar",
+    "reward_type": "normal_reward",
+    "reverse_penalty": false,
+    "planwindow": 1,
     "use_static_cost": true,
     "use_dynamic_cost": true,
     "reset_dynamic_cost": true,
