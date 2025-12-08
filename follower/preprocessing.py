@@ -7,13 +7,14 @@ from pydantic import BaseModel
 
 from follower.planning import ResettablePlanner, PlannerConfig
 from follower_robust.encoder import CNNEncoder
-from typing import List
+from typing import Any, List
 from sample_factory.utils.utils import log
 try:
     from typing import Literal
 except ImportError:
     from typing_extensions import Literal
-    
+from collections import deque
+
 class InferenceNetConfig(BaseModel):
     weight_path: str
     hidden_size: int
@@ -78,9 +79,8 @@ class FollowerWrapper(ObservationWrapper):
         self._cfg: PreprocessorConfig = config
         self.re_plan = ResettablePlanner(self._cfg)
         self.prev_goals = None
-        self.prev_pos = None
         self.intrinsic_reward = None
-
+        self.agent_histories = None
     @staticmethod
     def get_relative_xy(x, y, tx, ty, obs_radius):
         dx, dy = x - tx, y - ty
@@ -107,12 +107,14 @@ class FollowerWrapper(ObservationWrapper):
                 new_goals.append(obs['target_xy'])  # Use the target position as a new goal.
                 path = []
             else:
+                if obs['xy'] in path:
+                    path = path[path.index(obs['xy']):]
                 # Check if the agent reached their subgoal from its previous step
                 subgoal_achieved = self.prev_goals and obs['xy'] == self.prev_goals[k]
                 # Assign an intrinsic reward if conditions are met, otherwise set it to 0.
                 intrinsic_rewards.append(self._cfg.intrinsic_target_reward if subgoal_achieved else 0.0)
                 # Select a new target point.
-                new_goals.append(path[1])
+                new_goals.append(path[1] if len(path) > 1 else path[0])
 
             # Set obstacle values to -1.0 in the observation.
             obs['obstacles'][obs['obstacles'] > 0] *= -1
@@ -138,21 +140,18 @@ class FollowerWrapper(ObservationWrapper):
         if self._cfg.path_planner == 'astar':
             return self.observation_astar(observations)
         self.re_plan.update(observations)
-        
         paths_list = self.re_plan.get_path()  
 
+        if self.agent_histories is None:
+            self.agent_histories = [deque(maxlen=3) for _ in range(len(observations))]
         new_goals = []
-        new_pos = []
         intrinsic_rewards = []
-        # print("path_list", paths_list)    
         for k, candidate_paths in enumerate(paths_list):
             obs = observations[k]
-            new_pos.append(obs['xy'])
-            # print("candidate_paths", candidate_paths)
             for index, path in enumerate(candidate_paths): # 路径截断
                 if obs['xy'] in path:
                     candidate_paths[index] = path[path.index(obs['xy']):]
-
+            self.agent_histories[k].append(obs['xy']) # 更新历史轨迹
             candidate_paths.sort(key=lambda x: len(x))
             if not candidate_paths:
                 new_goals.append([obs['target_xy']])
@@ -165,7 +164,6 @@ class FollowerWrapper(ObservationWrapper):
                     subgoal_achieved = True
                     path_index = self.prev_goals[k].index(obs['xy'])
                         
-            # intrinsic_rewards.append(self._cfg.intrinsic_target_reward if subgoal_achieved else 0.0)
             if subgoal_achieved:
                 if self._cfg.reward_type == "normal_reward":
                     reward = self._cfg.intrinsic_target_reward
@@ -173,31 +171,36 @@ class FollowerWrapper(ObservationWrapper):
                     reward = self._cfg.intrinsic_target_reward * 2 if path_index == 0 else self._cfg.intrinsic_target_reward
             else:
                 reward = 0.0
-            if self.prev_pos and self._cfg.reverse_penalty:
-                if new_pos[k] == self.prev_pos[k]:  # reverse penalty
-                    reward -= self._cfg.intrinsic_target_reward
+            if self._cfg.reverse_penalty: # 计算回头惩罚
+                reward += self.reverse_penalty(self.agent_histories[k])
             intrinsic_rewards.append(reward)
             obs['obstacles'][obs['obstacles'] > 0] *= -1
             r = obs['obstacles'].shape[0] // 2
 
-            for path in candidate_paths:
+            for index, path in enumerate(reversed(candidate_paths)):
                 for gx, gy in path:
                     x, y = self.get_relative_xy(*obs['xy'], gx, gy, r)
                     if x is not None and y is not None:
-                        obs['obstacles'][x, y] = 1.0
+                        obs['obstacles'][x, y] = 2.0 if index == len(candidate_paths) - 1 else 1.0
                     else:
                         break
 
-        self.prev_pos = new_pos
         self.prev_goals = new_goals
         self.intrinsic_reward = intrinsic_rewards
-        # print(observations[0]['obstacles'])
-        # print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
+        print(observations[0]['obstacles'])
+        print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
+        # print("action", action if action is None else action[0])
         # print("pathlist", len(paths_list[0]))
         # print("sub goal", self.prev_goals[0])
         # print("reward", self.intrinsic_reward[0])
+        print("agent_histories", self.agent_histories[0])
         return observations
 
+    def reverse_penalty(self, history):
+        if len(history) < 3:
+            return 0.0
+        return -self._cfg.intrinsic_target_reward if history[0] == history[2] and history[1] != history[0] else 0.0
+    
     def get_intrinsic_rewards(self, reward):
         for agent_idx, r in enumerate(reward):
             reward[agent_idx] = self.intrinsic_reward[agent_idx]
@@ -210,7 +213,7 @@ class FollowerWrapper(ObservationWrapper):
     def reset_state(self):
         self.re_plan.reset_states()
         self.re_plan._agent.add_grid_obstacles(self.get_global_obstacles(), self.get_global_agents_xy())
-
+        self.agent_histories = None
         self.prev_goals = None
         self.intrinsic_reward = None
 

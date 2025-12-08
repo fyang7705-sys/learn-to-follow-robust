@@ -49,7 +49,8 @@ class Planner:
                 penalties = pen_calc.precompute_penalty_matrix(obs_radius)
                 for p in self.planner:
                     p.set_penalties(penalties)
-
+        if self.results is None:
+            self.results = [None] * num_agents
         for k in range(num_agents):
             if obs[k]['xy'] == obs[k]['target_xy']:
                 continue
@@ -59,27 +60,24 @@ class Planner:
             if self.if_replan(k, obs[k]):
                 if self.cfg.path_planner == "astar":
                     self.planner[k].update_path(obs[k]['xy'], obs[k]['target_xy'])
+                    self.results[k] = self.planner[k].get_path()
                 else:
                     self.planner[k].update_focal_paths(obs[k]['xy'], obs[k]['target_xy'])
+                    self.results[k] = self.planner[k].get_focal_paths()
             self.replan_counts[k] += 1
 
     def if_replan(self, agent_index, agent_obs):
         if self.replan_counts[agent_index] % self.replan_window == 0:
             return True
-        cur_goal = list(self.results[agent_index][0][-1]) if self.results[agent_index][0] else obs[agent_index]['target_xy']
-        # print("cur_goal", cur_goal)
-        # print("agent_obs['xy']", agent_obs['xy'])
+        if self.cfg.path_planner == "astar":
+            cur_goal = list(self.results[agent_index][-1]) if self.results[agent_index] else agent_obs['target_xy']
+        else:
+            cur_goal = list(self.results[agent_index][0][-1]) if self.results[agent_index][0] else agent_obs['target_xy']
         if agent_obs['xy'] == cur_goal:
             return True
         return False
-
+    
     def get_path(self):
-        self.results = []
-        for idx in range(len(self.planner)):
-            if self.cfg.path_planner == "astar":
-                self.results.append(self.planner[idx].get_path())
-            else:
-                self.results.append(self.planner[idx].get_focal_paths())
         return self.results
 
 

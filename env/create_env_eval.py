@@ -29,12 +29,13 @@ class BugActionWrapper(ActionWrapper):
         observations, infos = self.env.reset(**kwargs)
         # self.bug_prob = self.bug_probs[(self.episode) % (len(self.bug_probs) * 100) //  100]
         # print("giao0")
-        if self.custom_bug_prob != None:
+        if self.custom_bug_prob is not None:
             self.bug_prob = self.custom_bug_prob
             # print("giao1", self.custom_bug_prob)
         else:
             self.bug_prob = np.random.choice(self.bug_probs)
-            # print("giao2", self.bug_prob)
+            # self.bug_prob = 0.5
+            # print("giao2 bug_prob", self.bug_prob)
         self.episode += 1
         return observations, infos
 
