@@ -30,71 +30,107 @@ environment:
 algorithms:
 
   Follower:
-    name: Follower
+      name: Follower
+      num_process: 64
+      parallel_backend: 'balanced_dask'
+  # only_dist_mat_taskembeddingsize_64_share_reward01:
+  #   name: FollowerRobust
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
+  #   path_to_weights: "focal_reward-experiments/taskembedding_size_64/astar/only_dist_mat/share_reward01/train_dir/exp"
+  # only_dist_mat_taskembeddingsize_64:
+  #   name: FollowerRobust
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
+  #   path_to_weights: "focal_reward-experiments/taskembedding_size_64/astar/only_dist_mat/test/train_dir/exp"
+  # only_dist_mat_taskembeddingsize_0:
+  #   name: FollowerRobust
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
+  #   path_to_weights: "focal_reward-experiments/taskembedding_size_0/astar/only_dist_mat/test/train_dir/exp"
+  # dist_mat_taskembeddingsize_0:
+  #   name: FollowerRobust
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
+  #   path_to_weights: "focal_reward-experiments/taskembedding_size_0/astar/dist_mat/train_dir/exp"
+
+
+  # share_03_astar_taskembeddingsize_0:
+  #   name: FollowerRobust
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
+  #   path_to_weights: "focal_reward-experiments/taskembedding_size_0/astar/share_reward03/train_dir/exp"
+  bug_5_astar_taskembeddingsize_0:
+    name: FollowerRobust
     num_process: 64
     parallel_backend: 'balanced_dask'
+    path_to_weights: "bug_experiments/taskembedding_size_0/astar/train_dir/exp"
+  # Follower:
+  #   name: Follower
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
   #   run_episode_func: 'collect_data'
     # custom_path_to_weight: model/follower
 
-  focal_taskembeddingsize_1024:
-    name: FollowerRobust
-    num_process: 64
-    parallel_backend: 'balanced_dask'
-    path_to_weights: "taskembedding_size-experiments/1024/focal/train_dir/exp"
+  # focal_taskembeddingsize_1024:
+  #   name: FollowerRobust
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
+  #   path_to_weights: "taskembedding_size-experiments/1024/focal/train_dir/exp"
  
-  astar_taskembeddingsize_1024:
-    name: FollowerRobust
-    num_process: 64
-    parallel_backend: 'balanced_dask'
-    path_to_weights: "taskembedding_size-experiments/1024/astar/train_dir/exp"
+  # astar_taskembeddingsize_1024:
+  #   name: FollowerRobust
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
+  #   path_to_weights: "taskembedding_size-experiments/1024/astar/train_dir/exp"
 
-  diversefocal_taskembeddingsize_1024:
-    name: FollowerRobust
-    num_process: 64
-    parallel_backend: 'balanced_dask'
-    path_to_weights: "taskembedding_size-experiments/1024/diversefocal/train_dir/exp"
+  # diversefocal_taskembeddingsize_1024:
+  #   name: FollowerRobust
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
+  #   path_to_weights: "taskembedding_size-experiments/1024/diversefocal/train_dir/exp"
 
-  astar_taskembeddingsize_0:
-    name: FollowerRobust
-    num_process: 64
-    parallel_backend: 'balanced_dask'
-    path_to_weights: "taskembedding_size-experiments/0/astar/train_dir/exp"
+  # astar_taskembeddingsize_0:
+  #   name: FollowerRobust
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
+  #   path_to_weights: "taskembedding_size-experiments/0/astar/train_dir/exp"
 
-  focal_taskembeddingsize_0:
-    name: FollowerRobust
-    num_process: 64
-    parallel_backend: 'balanced_dask'
-    path_to_weights: "taskembedding_size-experiments/0/focal/train_dir/exp"
+  # focal_taskembeddingsize_0:
+  #   name: FollowerRobust
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
+  #   path_to_weights: "taskembedding_size-experiments/0/focal/train_dir/exp"
 
-  diversefocal_taskembeddingsize_1_length_reward:
-    name: FollowerRobust
-    num_process: 64
-    parallel_backend: 'balanced_dask'
-    path_to_weights: "focal_reward-experiments/taskembedding_size_1/diversefocal/length_reward/train_dir/exp"
+  # diversefocal_taskembeddingsize_1_length_reward:
+  #   name: FollowerRobust
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
+  #   path_to_weights: "focal_reward-experiments/taskembedding_size_1/diversefocal/length_reward/train_dir/exp"
   
-  diversefocal_taskembeddingsize_1024_length_reward:
-    name: FollowerRobust
-    num_process: 64
-    parallel_backend: 'balanced_dask'
-    path_to_weights: "focal_reward-experiments/taskembedding_size_1024/diversefocal/length_reward/train_dir/exp"
+  # diversefocal_taskembeddingsize_1024_length_reward:
+  #   name: FollowerRobust
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
+  #   path_to_weights: "focal_reward-experiments/taskembedding_size_1024/diversefocal/length_reward/train_dir/exp"
 
-  diversefocal_taskembeddingsize_1024_planwindow_4:
-    name: FollowerRobust
-    num_process: 64
-    parallel_backend: 'balanced_dask'
-    path_to_weights: "focal_reward-experiments/taskembedding_size_1024/diversefocal/planwindow_4/train_dir/exp"
+  # diversefocal_taskembeddingsize_1024_planwindow_4:
+  #   name: FollowerRobust
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
+  #   path_to_weights: "focal_reward-experiments/taskembedding_size_1024/diversefocal/planwindow_4/train_dir/exp"
   
-  diversefocal_taskembeddingsize_1024_planwindow_5:
-    name: FollowerRobust
-    num_process: 64
-    parallel_backend: 'balanced_dask'
-    path_to_weights: "focal_reward-experiments/taskembedding_size_1024/diversefocal/planwindow_5/train_dir/exp"
+  # diversefocal_taskembeddingsize_1024_planwindow_5:
+  #   name: FollowerRobust
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
+  #   path_to_weights: "focal_reward-experiments/taskembedding_size_1024/diversefocal/planwindow_5/train_dir/exp"
   
-  diversefocal_taskembeddingsize_1024_reverse_penalty:
-    name: FollowerRobust
-    num_process: 64
-    parallel_backend: 'balanced_dask'
-    path_to_weights: "focal_reward-experiments/taskembedding_size_1024/diversefocal/reverse_penalty/train_dir/exp"
+  # diversefocal_taskembeddingsize_1024_reverse_penalty:
+  #   name: FollowerRobust
+  #   num_process: 64
+  #   parallel_backend: 'balanced_dask'
+  #   path_to_weights: "focal_reward-experiments/taskembedding_size_1024/diversefocal/reverse_penalty/train_dir/exp"
 
 
 
@@ -136,6 +172,7 @@ results_views:
     use_log_scale_x: False
     legend_font_size: 8
     font_size: 8
-    hue_order: [ FollowerRobust, Follower]
+    hue_order: [ bug_5_astar_taskembeddingsize_0, Follower]
+    # hue_order: [ bug_5_astar_taskembeddingsize_0, Follower, astar_taskembeddingsize_1024, focal_taskembeddingsize_1024, diversefocal_taskembeddingsize_1024, diversefocal_taskembeddingsize_1024_length_reward, diversefocal_taskembeddingsize_1024_planwindow_4, diversefocal_taskembeddingsize_1024_planwindow_5, diversefocal_taskembeddingsize_1024_reverse_penalty, astar_taskembeddingsize_0, focal_taskembeddingsize_0, diversefocal_taskembeddingsize_1_length_reward]
     name: Random $20 \times 20$
     ticks: [ 0.0, 0.1, 0.2, 0.3, 0.4, 0.5]

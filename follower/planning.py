@@ -12,10 +12,12 @@ try:
 except ImportError:
     from typing_extensions import Literal
 import numpy as np
+from sample_factory.utils.utils import log
 
 class PlannerConfig(BaseModel):
     use_static_cost: bool = True
     use_dynamic_cost: bool = True
+    use_dist_mat: bool = False
     reset_dynamic_cost: bool = True
     planwindow: int = 1
     path_planner: Literal['diversefocal', 'focal', 'astar'] = "astar"
@@ -27,6 +29,7 @@ class Planner:
         self.starts = None
         self.cfg = cfg
         self.results = None
+        self.dist_mats = None
         self.replan_window = cfg.planwindow
         self.replan_counts = None
 
@@ -37,7 +40,7 @@ class Planner:
         self.results = None
         self.replan_counts = np.zeros((len(self.starts),))
         
-    def update(self, obs):
+    def update(self, obs, use_dist_mat=False):
         num_agents = len(obs)
         obs_radius = len(obs[0]['obstacles']) // 2
         if self.planner is None:
@@ -51,27 +54,34 @@ class Planner:
                     p.set_penalties(penalties)
         if self.results is None:
             self.results = [None] * num_agents
+        if use_dist_mat and self.dist_mats is None:
+            self.dist_mats = [None] * num_agents
         for k in range(num_agents):
+            self.replan_counts[k] += 1
             if obs[k]['xy'] == obs[k]['target_xy']:
                 continue
             obs[k]['agents'][obs_radius][obs_radius] = 0
             self.planner[k].update_occupations(obs[k]['agents'], (obs[k]['xy'][0] - obs_radius, obs[k]['xy'][1] - obs_radius), obs[k]['target_xy'])
             obs[k]['agents'][obs_radius][obs_radius] = 1
-            if self.if_replan(k, obs[k]):
-                if self.cfg.path_planner == "astar":
+            if self.if_replan(k, obs[k], use_dist_mat):
+                if use_dist_mat:
+                    self.planner[k].update_dist_mat(obs[k]['xy'], obs[k]['target_xy'])
+                    self.dist_mats[k] = self.planner[k].get_dist_mat(obs_radius)
+                elif self.cfg.path_planner == "astar":
                     self.planner[k].update_path(obs[k]['xy'], obs[k]['target_xy'])
                     self.results[k] = self.planner[k].get_path()
-                else:
+                else: # diversefocal or focal
                     self.planner[k].update_focal_paths(obs[k]['xy'], obs[k]['target_xy'])
                     self.results[k] = self.planner[k].get_focal_paths()
-            self.replan_counts[k] += 1
 
-    def if_replan(self, agent_index, agent_obs):
+    def if_replan(self, agent_index, agent_obs, use_dist_mat=False):
         if self.replan_counts[agent_index] % self.replan_window == 0:
             return True
-        if self.cfg.path_planner == "astar":
+        if use_dist_mat:
+            cur_goal = agent_obs['target_xy']
+        elif self.cfg.path_planner == "astar":
             cur_goal = list(self.results[agent_index][-1]) if self.results[agent_index] else agent_obs['target_xy']
-        else:
+        else: # diversefocal or focal
             cur_goal = list(self.results[agent_index][0][-1]) if self.results[agent_index][0] else agent_obs['target_xy']
         if agent_obs['xy'] == cur_goal:
             return True
@@ -79,18 +89,20 @@ class Planner:
     
     def get_path(self):
         return self.results
-
+    def get_dist_mat(self):
+        return self.dist_mats
 
 class ResettablePlanner:
     def __init__(self, cfg: PlannerConfig):
         self._cfg = cfg
         self._agent = None
 
-    def update(self, observations):
-        return self._agent.update(observations)
+    def update(self, observations, use_dist_mat=False):
+        return self._agent.update(observations, use_dist_mat)
 
     def get_path(self):
         return self._agent.get_path()
-
-    def reset_states(self, ):
+    def get_dist_mat(self):
+        return self._agent.get_dist_mat()
+    def reset_states(self):
         self._agent = Planner(self._cfg)

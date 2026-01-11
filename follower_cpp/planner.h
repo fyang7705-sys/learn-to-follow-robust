@@ -428,6 +428,9 @@ class planner
             total_tries++;
         }
     }
+
+
+
     float get_avg_distance(int si, int sj)
     {
         std::queue<std::pair<int, int>> fringe;
@@ -580,6 +583,47 @@ public:
             update_h_values(g);
         goal = g;
         compute_focal_paths();
+    }
+
+    void update_dist_mat(std::pair<int, int> s, std::pair<int, int> g)
+    {
+        s = {s.first + abs_offset.first, s.second + abs_offset.second};
+        g = {g.first + abs_offset.first, g.second + abs_offset.second};
+        start = s;
+        goal = g;
+    }
+
+    std::vector<std::vector<float>> get_dist_mat(int obs_radius)
+    {
+        std::vector<std::vector<float>> dist_agent(obs_radius * 2 + 1, std::vector<float>(obs_radius * 2 + 1, INF));
+        std::vector<std::vector<bool>> visited(grid.size(), std::vector<bool>(grid.front().size(), false));
+        std::vector<std::vector<float>> dist_mat(grid.size(), std::vector<float>(grid.front().size(), INF));
+        visited[goal.first][goal.second] = false;
+        dist_mat[goal.first][goal.second] = 0;
+        std::priority_queue<Node, std::vector<Node>, std::greater<Node>> OPEN;
+        OPEN.push(Node(goal.first, goal.second, 0, 0));
+        while(!OPEN.empty())
+        {
+            Node current = OPEN.top();
+            OPEN.pop();
+            if(visited[current.i][current.j]) continue;
+            visited[current.i][current.j] = true;
+            for(auto n: get_neighbors({current.i, current.j})) {
+                float cost(1);
+                if(use_static_cost) cost = penalties[n.first][n.second];
+                if(use_dynamic_cost) cost += num_occupations[n.first][n.second];
+                if(dist_mat[n.first][n.second] > dist_mat[current.i][current.j] + cost)
+                {
+                    dist_mat[n.first][n.second] = dist_mat[current.i][current.j] + cost;
+                    OPEN.push(Node(n.first, n.second, dist_mat[n.first][n.second], 0));
+                }
+            }
+        }
+        for(int i = 0; i < obs_radius * 2 + 1; i++)
+            for(int j = 0; j < obs_radius * 2 + 1; j++)
+                dist_agent[i][j] = dist_mat[start.first + i - obs_radius][start.second + j - obs_radius];
+        
+        return dist_agent;
     }
 
     std::list<std::list<std::pair<int, int>>> get_focal_paths()

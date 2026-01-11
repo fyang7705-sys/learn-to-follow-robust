@@ -1,6 +1,6 @@
 import numpy as np
 import gymnasium
-from gymnasium import ObservationWrapper
+from gymnasium import ObservationWrapper, RewardWrapper
 from gymnasium.spaces import Box, Dict
 import torch
 from pydantic import BaseModel
@@ -14,7 +14,7 @@ try:
 except ImportError:
     from typing_extensions import Literal
 from collections import deque
-
+INF = 1000000000
 class InferenceNetConfig(BaseModel):
     weight_path: str
     hidden_size: int
@@ -35,6 +35,7 @@ class PreprocessorConfig(PlannerConfig):
     network_input_radius: int = 5
     intrinsic_target_reward: float = 0.01
     use_latent_embedding: bool = True
+    share_reward: float = 0.0
     latent_size: int = 1
     inference_windowsize: int = 5
     inference_net: InferenceNetConfig = InferenceNetConfig(
@@ -62,6 +63,10 @@ def follower_preprocessor(env, algo_config):
 def wrap_preprocessors(env, config: PreprocessorConfig, auto_reset=False):
     
     env = FollowerWrapper(env=env, config=config)
+    if config.use_dist_mat:
+        env = DistMatWrapper(env, config=config)
+    if config.share_reward > 0:
+        env = ShareRewardWrapper(env, config=config)
     env = CutObservationWrapper(env, target_observation_radius=config.network_input_radius)
     env = ConcatPositionalFeatures(env)
     if config.use_latent_embedding:
@@ -87,6 +92,34 @@ class FollowerWrapper(ObservationWrapper):
         if dx > obs_radius or dx < -obs_radius or dy > obs_radius or dy < -obs_radius:
             return None, None
         return obs_radius - dx, obs_radius - dy
+    def draw(self, obs_map):
+            np.set_printoptions(linewidth=200, formatter={'float': '{: 5.0f}'.format})
+
+            RED = '\033[91m'
+            RESET = '\033[0m'
+            for r in range(obs_map.shape[0]):
+                row_str = []
+                for c in range(obs_map.shape[1]):
+                    # 1. 转换为整数并格式化宽度（>3表示右对齐，占3位）保持对齐
+                    if type(obs_map[r, c]) == np.float32:
+                        val = obs_map[r, c]
+                        if val == INF:
+                            val_str = "INF"
+                        else:   
+                            val_str = f"{val:>5.2f}" 
+                    else:
+                        val = int(obs_map[r, c])
+                        val_str = f"{val:>3.0f}" 
+                    
+                    # 2. 如果是目标坐标 [5][5]，加上红色代码
+                    if r == 5 and c == 5:
+                        row_str.append(f"{RED}{val_str}{RESET}")
+                    else:
+                        row_str.append(val_str)
+                
+                # 3. 打印整行，用空格连接
+                print(" [" + " ".join(row_str) + " ]")
+            print("="*50)
 
     def observation_astar(self, observations):
         # Update cost penalties based on the current observations, independently for each agent.
@@ -104,6 +137,7 @@ class FollowerWrapper(ObservationWrapper):
 
             # Check if there is no valid path available.
             if path is None:
+                log.warning(f"No valid path available for agent {k}")
                 new_goals.append(obs['target_xy'])  # Use the target position as a new goal.
                 path = []
             else:
@@ -121,17 +155,25 @@ class FollowerWrapper(ObservationWrapper):
 
             # Adding path to the observation, setting path values to +1.0.
             r = obs['obstacles'].shape[0] // 2
-            for idx, (gx, gy) in enumerate(path):
-                x, y = self.get_relative_xy(*obs['xy'], gx, gy, r)
-                if x is not None and y is not None:
-                    obs['obstacles'][x, y] = 1.0
-                else:
-                    break
+            try:
+                for idx, (gx, gy) in enumerate(path):
+                    x, y = self.get_relative_xy(*obs['xy'], gx, gy, r)
+                    if x is not None and y is not None:
+                        obs['obstacles'][x, y] = 1.0
+                    else:
+                        break
+            except Exception as e:
+                print(e)
+                log.warning(f"Error in adding path to observation for agent {k}")
+                print(path)
             # print(obs['obstacles'])
         # Update the previous goals and intrinsic rewards for the next step.
         self.prev_goals = new_goals
         self.intrinsic_reward = intrinsic_rewards
         # print(observations[0]['obstacles'])
+        # self.draw(observations[0]['obstacles'])
+        # print("="*50)
+        # self.draw(observations[0]['agents'])
         # print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
         # print("reward", self.intrinsic_reward[0])
         return observations
@@ -187,13 +229,13 @@ class FollowerWrapper(ObservationWrapper):
 
         self.prev_goals = new_goals
         self.intrinsic_reward = intrinsic_rewards
-        print(observations[0]['obstacles'])
-        print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
+        # print(observations[0]['obstacles'])
+        # print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
         # print("action", action if action is None else action[0])
         # print("pathlist", len(paths_list[0]))
         # print("sub goal", self.prev_goals[0])
         # print("reward", self.intrinsic_reward[0])
-        print("agent_histories", self.agent_histories[0])
+        # print("agent_histories", self.agent_histories[0])
         return observations
 
     def reverse_penalty(self, history):
@@ -204,6 +246,7 @@ class FollowerWrapper(ObservationWrapper):
     def get_intrinsic_rewards(self, reward):
         for agent_idx, r in enumerate(reward):
             reward[agent_idx] = self.intrinsic_reward[agent_idx]
+        # print("ori_reward", reward[0])
         return reward
 
     def step(self, action):
@@ -221,6 +264,113 @@ class FollowerWrapper(ObservationWrapper):
         observations, infos = self.env.reset(**kwargs)
         self.reset_state()
         return self.observation(observations), infos
+
+class DistMatWrapper(ObservationWrapper):
+    def __init__(self, env, config: PreprocessorConfig):
+        super().__init__(env)
+        self._cfg = config
+        self.planner = env.re_plan
+        self.prev = None
+        self.dist_mat_rewards = None
+    def observation(self, observations, max_dist=100):
+        self.planner.update(observations, use_dist_mat=True)
+
+        # Retrieve the shortest path to the global target for each agent.
+        r = observations[0]['obstacles'].shape[0] // 2
+        new_goals = []
+        mats = self.planner.get_dist_mat()
+        # self.draw(np.array(mats[0]))
+        rewards = []  # Initialize a list to store intrinsic rewards for each agent.
+        for k, mat in enumerate(mats):
+            obs = observations[k]
+            obs['obstacles'] = np.zeros_like(obs['obstacles'])
+            for y, row in enumerate(mat):
+                for x, val in enumerate(row):
+                    if val != INF and obs['obstacles'][y, x] != -1:
+                        obs['obstacles'][y, x] = 1 - val / max_dist if val < max_dist else 0
+                    else:
+                        obs['obstacles'][y, x] = -1
+            new_goals.append(mat[r][r])
+            if self.prev:
+                if mat[r][r] < self.prev[k]:
+                    rewards.append(self._cfg.intrinsic_target_reward)
+                else:
+                    rewards.append(0)
+            else:
+                rewards.append(0)
+        self.dist_mat_rewards = rewards
+        self.prev = new_goals
+        # print("mat")
+        # self.draw(np.array(mats[0]))
+        # print("dist_mat")
+        # self.draw(observations[0]['dist_mat'])
+        # print("obstacles")
+        # self.draw(observations[0]['obstacles'].astype(np.int32))
+        # print("agents")
+        # self.draw(observations[0]['agents'].astype(np.int32))
+        # print("reward", self.dist_mat_rewards[0])
+        # self.draw(observations[0]['obstacles'])
+        return observations
+    def step(self, action):
+        observation, reward, done, tr, info = self.env.step(action)
+        return self.observation(observation), self.get_rewards(reward), done, tr, info
+    
+    def reset(self, **kwargs):
+        observations, infos = self.env.reset(**kwargs)
+        self.dist_mat_rewards = None
+        self.prev = None
+        return self.observation(observations), infos
+    
+    def get_rewards(self, reward):
+        for agent_idx, r in enumerate(reward):
+            reward[agent_idx] = self.dist_mat_rewards[agent_idx]
+        # print("ori_reward", reward[0])
+        return reward
+
+
+class ShareRewardWrapper(RewardWrapper):
+    def __init__(self, env, config: PreprocessorConfig):
+        super().__init__(env)
+        self._cfg = config
+        self.share_rewards = []
+        self.radius = self.env.observation_space['obstacles'].shape[0] // 2
+        self.alpha = config.share_reward
+
+    def step(self, action):
+        observation, reward, terminated, truncated, info = self.env.step(action)
+        
+        all_global_xy = self.get_global_agents_xy()
+        all_xy = np.array([xy for xy in all_global_xy])
+        all_rewards = np.array(reward)
+
+        # diff[i, j] 表示 Agent i 和 Agent j 的坐标差 (dx, dy)
+        diff = all_xy[:, np.newaxis, :] - all_xy[np.newaxis, :, :]
+        
+        abs_diff = np.abs(diff)
+        
+        dist_mask = np.max(abs_diff, axis=2) <= self.radius
+        
+        np.fill_diagonal(dist_mask, False)
+        # all_rewards = np.maximum(all_rewards, 0.0)
+        
+        neighbor_reward_sum = dist_mask @ all_rewards
+        
+        neighbor_counts = dist_mask.sum(axis=1)
+        
+        safe_counts = np.maximum(neighbor_counts, 1)
+        shared_bonus = neighbor_reward_sum / safe_counts
+        
+        shared_bonus[neighbor_counts == 0] = 0.0
+        
+        self.share_rewards = shared_bonus.tolist()
+
+        final_rewards = all_rewards + self.alpha * shared_bonus
+        # final_rewards *= 10
+        # print("neighbor_counts", neighbor_counts[0])
+        # print("finalreward", final_rewards[0])
+        return observation, final_rewards.tolist(), terminated, truncated, info
+
+
 
 
 class CutObservationWrapper(ObservationWrapper):
@@ -367,7 +517,7 @@ class EncodeDataCollectionWrapper(ObservationWrapper):
             
             
             # normalize
-            z = 2 * (self.bug_probs[-1] - self.bug_prob) / (self.bug_probs[-1] - self.bug_probs[0]) - 1
+            z = 2 * (self.bug_prob - self.bug_probs[0]) / (self.bug_probs[-1] - self.bug_probs[0]) - 1
             # put into observations
             for i in range(len(observations)):
                 observations[i]['latent'] = np.array([z], dtype=np.float32)
@@ -386,9 +536,6 @@ class EncodeDataCollectionWrapper(ObservationWrapper):
         return self.observation(obs), info
 
 
-
-    
-    
 
 class AutoResetWrapper(gymnasium.Wrapper):
     def step(self, action):
