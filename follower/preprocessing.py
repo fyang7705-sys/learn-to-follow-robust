@@ -7,6 +7,9 @@ from pydantic import BaseModel
 
 from follower.planning import ResettablePlanner, PlannerConfig
 from follower_robust.encoder import CNNEncoder
+
+from planner.preprocessing import PlannerWrapper
+
 from typing import Any, List
 from sample_factory.utils.utils import log
 try:
@@ -37,6 +40,7 @@ class PreprocessorConfig(PlannerConfig):
     use_latent_embedding: bool = True
     latent_size: int = 1
     inference_windowsize: int = 5
+    follower_weight_path: str = "model/follower/checkpoint_p0/checkpoint_000061056_1000341504.pth"
     inference_net: InferenceNetConfig = InferenceNetConfig(
         weight_path="model/follower-robust/checkpoint/encoder/encoder_20251118_065830_762916.pt",
         hidden_size=64,
@@ -64,9 +68,6 @@ def wrap_preprocessors(env, config: PreprocessorConfig, auto_reset=False):
     env = FollowerWrapper(env=env, config=config)
     env = CutObservationWrapper(env, target_observation_radius=config.network_input_radius)
     env = ConcatPositionalFeatures(env)
-    if config.use_latent_embedding:
-        env = EncodeDataCollectionWrapper(env, config=config)
-        # env = BugActionWrapper(env, config=config)
     if auto_reset:
         env = AutoResetWrapper(env)
     return env
@@ -87,14 +88,15 @@ class FollowerWrapper(ObservationWrapper):
         if dx > obs_radius or dx < -obs_radius or dy > obs_radius or dy < -obs_radius:
             return None, None
         return obs_radius - dx, obs_radius - dy
-
-    def observation_astar(self, observations):
+    def set_path(self, paths):
+        self.paths = paths
+    def observation(self, observations):
         # Update cost penalties based on the current observations, independently for each agent.
-        self.re_plan.update(observations)
+        # self.re_plan.update(observations)
 
         # Retrieve the shortest path to the global target for each agent.
-        paths = self.re_plan.get_path()
-
+        # paths = self.re_plan.get_path()
+        paths = self.paths
         new_goals = []  # Initialize a list to store new goals for each agent.
         intrinsic_rewards = []  # Initialize a list to store intrinsic rewards for each agent.
 
@@ -136,70 +138,6 @@ class FollowerWrapper(ObservationWrapper):
         # print("reward", self.intrinsic_reward[0])
         return observations
 
-    def observation(self, observations):
-        if self._cfg.path_planner == 'astar':
-            return self.observation_astar(observations)
-        self.re_plan.update(observations)
-        paths_list = self.re_plan.get_path()  
-
-        if self.agent_histories is None:
-            self.agent_histories = [deque(maxlen=3) for _ in range(len(observations))]
-        new_goals = []
-        intrinsic_rewards = []
-        for k, candidate_paths in enumerate(paths_list):
-            obs = observations[k]
-            for index, path in enumerate(candidate_paths): # 路径截断
-                if obs['xy'] in path:
-                    candidate_paths[index] = path[path.index(obs['xy']):]
-            self.agent_histories[k].append(obs['xy']) # 更新历史轨迹
-            candidate_paths.sort(key=lambda x: len(x))
-            if not candidate_paths:
-                new_goals.append([obs['target_xy']])
-            else:
-                new_goals.append([p[1] if len(p) > 1 else p[0] for p in candidate_paths])
-
-            subgoal_achieved = False
-            if self.prev_goals:
-                if obs['xy'] in self.prev_goals[k]:
-                    subgoal_achieved = True
-                    path_index = self.prev_goals[k].index(obs['xy'])
-                        
-            if subgoal_achieved:
-                if self._cfg.reward_type == "normal_reward":
-                    reward = self._cfg.intrinsic_target_reward
-                else:  # length_reward
-                    reward = self._cfg.intrinsic_target_reward * 2 if path_index == 0 else self._cfg.intrinsic_target_reward
-            else:
-                reward = 0.0
-            if self._cfg.reverse_penalty: # 计算回头惩罚
-                reward += self.reverse_penalty(self.agent_histories[k])
-            intrinsic_rewards.append(reward)
-            obs['obstacles'][obs['obstacles'] > 0] *= -1
-            r = obs['obstacles'].shape[0] // 2
-
-            for index, path in enumerate(reversed(candidate_paths)):
-                for gx, gy in path:
-                    x, y = self.get_relative_xy(*obs['xy'], gx, gy, r)
-                    if x is not None and y is not None:
-                        obs['obstacles'][x, y] = 2.0 if index == len(candidate_paths) - 1 else 1.0
-                    else:
-                        break
-
-        self.prev_goals = new_goals
-        self.intrinsic_reward = intrinsic_rewards
-        print(observations[0]['obstacles'])
-        print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
-        # print("action", action if action is None else action[0])
-        # print("pathlist", len(paths_list[0]))
-        # print("sub goal", self.prev_goals[0])
-        # print("reward", self.intrinsic_reward[0])
-        print("agent_histories", self.agent_histories[0])
-        return observations
-
-    def reverse_penalty(self, history):
-        if len(history) < 3:
-            return 0.0
-        return -self._cfg.intrinsic_target_reward if history[0] == history[2] and history[1] != history[0] else 0.0
     
     def get_intrinsic_rewards(self, reward):
         for agent_idx, r in enumerate(reward):
@@ -286,109 +224,6 @@ class ConcatPositionalFeatures(ObservationWrapper):
         elif 'agents' in x:
             return '1_' + x
         return '2_' + x
-
-
-class EncodeDataCollectionWrapper(ObservationWrapper):
-    def __init__(self, env, config):
-        super().__init__(env)
-        self.obs_buffer = []
-        self.reward_buffer = []
-        self.action_buffer = []
-        self.terminal_buffer = []
-        self.window_size = config.inference_windowsize
-        # self.inference_net = CNNEncoder(task_embedding_size = config.inference_net.task_embedding_size)
-        # inference_net_state_dict = torch.load(config.inference_net.weight_path, map_location = torch.device('cuda'))
-        # self.inference_net.load_state_dict(inference_net_state_dict)
-        # self.inference_net.eval()
-        self.cfg = config
-        self.bug_prob = env.bug_prob
-        self.env.observation_space['latent'] = Box(low=-np.inf, high=np.inf, shape=(config.latent_size,), dtype=np.float32,)
-        # log.warning(f"config.inference_net.task_embedding_size: {config.inference_net.task_embedding_size}")
-        
-    def step(self, action):
-        observations, reward, terminated, truncated, info = self.env.step(action) # 这里的action应该是传入的action, 还没有经过bug_prob的
-
-        # convert obs list to tensor (B, C, H, W)
-        obs_tensor = torch.tensor(
-            np.stack([o['obs'] for o in observations]),
-            dtype=torch.float32
-        )
-
-        # convert action / reward to (B,1) tensor
-        action_tensor = torch.tensor(action, dtype=torch.float32).unsqueeze(-1)
-        reward_tensor = torch.tensor(reward, dtype=torch.float32).unsqueeze(-1)
-        terminal_tensor = torch.zeros_like(reward_tensor)  # always 0 for inference
-
-        # push to buffers
-        self.obs_buffer.append(obs_tensor)
-        self.reward_buffer.append(reward_tensor)
-        self.action_buffer.append(action_tensor)
-        self.terminal_buffer.append(terminal_tensor)
-
-        # maintain window size
-        if len(self.obs_buffer) > self.window_size:
-            self.obs_buffer.pop(0)
-            self.reward_buffer.pop(0)
-            self.action_buffer.pop(0)
-            self.terminal_buffer.pop(0)
-        # print("reward", reward)
-        return self.observation(observations), reward, terminated, truncated, info
-    
-    def observation(self, observations):
-        if len(self.obs_buffer) > 0:
-            if len(self.obs_buffer) == self.window_size:
-
-                # stack to shapes:
-                # obs:     (T, B, C, H, W) -> (B, T, C, H, W)
-                # others:  (T, B, 1)       -> (B, T, 1)
-                obs_t = torch.stack(self.obs_buffer, dim=0).transpose(0, 1)
-                act_t = torch.stack(self.action_buffer, dim=0).transpose(0, 1)
-                rew_t = torch.stack(self.reward_buffer, dim=0).transpose(0, 1)
-                term_t = torch.stack(self.terminal_buffer, dim=0).transpose(0, 1)
-                
-            else:
-                current_T = len(self.obs_buffer)
-                pad_len = self.window_size - current_T
-
-                # 复制第 0 帧进行 padding
-                obs_pad = [self.obs_buffer[0]] * pad_len + self.obs_buffer
-                act_pad = [self.action_buffer[0]] * pad_len + self.action_buffer
-                rew_pad = [self.reward_buffer[0]] * pad_len + self.reward_buffer
-                term_pad = [self.terminal_buffer[0]] * pad_len + self.terminal_buffer
-                
-                obs_t = torch.stack(obs_pad, dim=0).transpose(0,1)
-                act_t = torch.stack(act_pad, dim=0).transpose(0,1)
-                rew_t = torch.stack(rew_pad, dim=0).transpose(0,1)
-                term_t = torch.stack(term_pad, dim=0).transpose(0,1)
-
-            # with torch.no_grad():
-            #     z = self.inference_net(obs_t, act_t, rew_t, term_t)
-            #     z = z.cpu().numpy()  # (B, embedding_size)
-            
-            
-            # normalize
-            z = 2 * (self.bug_probs[-1] - self.bug_prob) / (self.bug_probs[-1] - self.bug_probs[0]) - 1
-            # put into observations
-            for i in range(len(observations)):
-                observations[i]['latent'] = np.array([z], dtype=np.float32)
-        else:
-            for i in range(len(observations)):
-                observations[i]['latent'] = np.zeros((self.cfg.latent_size,))
-        return observations
-    
-    def reset(self, **kwargs):
-        self.obs_buffer = []
-        self.reward_buffer = []
-        self.action_buffer = []
-        self.terminal_buffer = []
-
-        obs, info = self.env.reset(**kwargs)
-        return self.observation(obs), info
-
-
-
-    
-    
 
 class AutoResetWrapper(gymnasium.Wrapper):
     def step(self, action):

@@ -70,6 +70,7 @@ class planner
     std::vector<std::vector<float>> h_values;
     std::vector<std::vector<Node>> nodes;
     std::list<std::list<std::pair<int, int>>> focal_paths;
+    std::list<std::pair<int, int>> dynamic_obstacles;
     bool use_static_cost;
     bool use_dynamic_cost;
     bool reset_dynamic_cost;
@@ -558,6 +559,28 @@ public:
         for(auto o:occupied_cells)
             num_occupations[o.first][o.second]+= 1.0;
     }
+    void set_dynamic_cost(py::array_t<double> array, std::pair<int, int> cur_pos, std::pair<int, int> cur_goal)
+    {
+        cur_pos = {cur_pos.first + abs_offset.first, cur_pos.second + abs_offset.second};
+        py::buffer_info buf = array.request();
+        double *ptr = (double *) buf.ptr;
+        if(goal.first != cur_goal.first || goal.second != cur_goal.second)
+        {    
+            num_occupations = std::vector<std::vector<float>>(grid.size(), std::vector<float>(grid.front().size(), 0));
+            dynamic_obstacles.clear();
+        }
+        double alpha = 0.5;
+        while(!dynamic_obstacles.empty())
+        {
+            auto o = dynamic_obstacles.front();
+            num_occupations[o.first][o.second] *= alpha;
+            dynamic_obstacles.pop_front();
+        }
+        for(size_t i = 0; i < static_cast<size_t>(buf.shape[0]); i++)
+            for(size_t j = 0; j < static_cast<size_t>(buf.shape[1]); j++)
+                num_occupations[cur_pos.first + i][cur_pos.second + j] += ptr[i*buf.shape[1] + j];
+    }
+
 
     void update_path(std::pair<int, int> s, std::pair<int, int> g)
     {
@@ -568,7 +591,6 @@ public:
             update_h_values(g);
         goal = g;
         reset();
-        compute_shortest_path();
     }
 
     void update_focal_paths(std::pair<int, int> s, std::pair<int, int> g)
@@ -582,13 +604,56 @@ public:
         compute_focal_paths();
     }
 
+    void update_dist_mat(std::pair<int, int> s, std::pair<int, int> g)
+    {
+        s = {s.first + abs_offset.first, s.second + abs_offset.second};
+        g = {g.first + abs_offset.first, g.second + abs_offset.second};
+        start = s;
+        goal = g;
+    }
+
+    std::vector<std::vector<float>> get_dist_mat(int obs_radius)
+    {
+        std::vector<std::vector<float>> dist_agent(obs_radius * 2 + 1, std::vector<float>(obs_radius * 2 + 1, INF));
+        std::vector<std::vector<bool>> visited(grid.size(), std::vector<bool>(grid.front().size(), false));
+        std::vector<std::vector<float>> dist_mat(grid.size(), std::vector<float>(grid.front().size(), INF));
+        visited[goal.first][goal.second] = false;
+        dist_mat[goal.first][goal.second] = 0;
+        std::priority_queue<Node, std::vector<Node>, std::greater<Node>> OPEN;
+        OPEN.push(Node(goal.first, goal.second, 0, 0));
+        while(!OPEN.empty())
+        {
+            Node current = OPEN.top();
+            OPEN.pop();
+            if(visited[current.i][current.j]) continue;
+            visited[current.i][current.j] = true;
+            for(auto n: get_neighbors({current.i, current.j})) {
+                float cost(1);
+                if(use_static_cost) cost = penalties[n.first][n.second];
+                if(use_dynamic_cost) cost += num_occupations[n.first][n.second];
+                if(dist_mat[n.first][n.second] > dist_mat[current.i][current.j] + cost)
+                {
+                    dist_mat[n.first][n.second] = dist_mat[current.i][current.j] + cost;
+                    OPEN.push(Node(n.first, n.second, dist_mat[n.first][n.second], 0));
+                }
+            }
+        }
+        for(int i = 0; i < obs_radius * 2 + 1; i++)
+            for(int j = 0; j < obs_radius * 2 + 1; j++)
+                dist_agent[i][j] = dist_mat[start.first + i - obs_radius][start.second + j - obs_radius];
+        
+        return dist_agent;
+    }
+    
     std::list<std::list<std::pair<int, int>>> get_focal_paths()
     {
         return focal_paths;
     }
 
     std::list<std::pair<int, int>> get_path()
-    {
+    {        
+        compute_shortest_path();
+
         std::list<std::pair<int, int>> path;
         std::pair<int, int> next_node(INF,INF);
         if(nodes[goal.first][goal.second].g < INF)
