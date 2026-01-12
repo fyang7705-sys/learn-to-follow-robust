@@ -8,8 +8,6 @@ from pydantic import BaseModel
 from follower.planning import ResettablePlanner, PlannerConfig
 from follower_robust.encoder import CNNEncoder
 
-from planner.preprocessing import PlannerWrapper
-
 from typing import Any, List
 from sample_factory.utils.utils import log
 try:
@@ -37,7 +35,7 @@ class PreprocessorConfig(PlannerConfig):
     reverse_penalty: bool = False
     network_input_radius: int = 5
     intrinsic_target_reward: float = 0.01
-    use_latent_embedding: bool = True
+    use_latent_embedding: bool = False
     latent_size: int = 1
     inference_windowsize: int = 5
     follower_weight_path: str = "model/follower/checkpoint_p0/checkpoint_000061056_1000341504.pth"
@@ -82,6 +80,7 @@ class FollowerWrapper(ObservationWrapper):
         self.prev_goals = None
         self.intrinsic_reward = None
         self.agent_histories = None
+        self.paths = None
     @staticmethod
     def get_relative_xy(x, y, tx, ty, obs_radius):
         dx, dy = x - tx, y - ty
@@ -97,6 +96,8 @@ class FollowerWrapper(ObservationWrapper):
         # Retrieve the shortest path to the global target for each agent.
         # paths = self.re_plan.get_path()
         paths = self.paths
+        if paths is None:
+            paths = []
         new_goals = []  # Initialize a list to store new goals for each agent.
         intrinsic_rewards = []  # Initialize a list to store intrinsic rewards for each agent.
 
@@ -133,8 +134,9 @@ class FollowerWrapper(ObservationWrapper):
         # Update the previous goals and intrinsic rewards for the next step.
         self.prev_goals = new_goals
         self.intrinsic_reward = intrinsic_rewards
-        # print(observations[0]['obstacles'])
-        # print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
+        print(observations[0]['obstacles'])
+        print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
+        print('-'*50)
         # print("reward", self.intrinsic_reward[0])
         return observations
 

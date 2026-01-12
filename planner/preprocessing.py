@@ -3,6 +3,9 @@ import numpy as np
 from planner.plan import Planner
 from follower.preprocessing import wrap_preprocessors
 from sample_factory.algo.learning.learner import Learner
+from sample_factory.model.model_utils import get_rnn_size
+from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
+
 
 from argparse import Namespace
 
@@ -10,10 +13,16 @@ import torch
 import json
 from os.path import join
 from sample_factory.model.actor_critic import create_actor_critic
-def planner_preprocessor(env, algo_config):
-    env = wrap_preprocessors(env, algo_config.training_config.preprocessing)
-    env = LowLevelWrapper(env, algo_config.training_config.preprocessing)
-    env = PlannerWrapper(env, algo_config.training_config.preprocessing)
+from sample_factory.utils.utils import log
+from sample_factory.utils.attr_dict import AttrDict
+from collections import OrderedDict
+import copy
+
+
+def planner_preprocessor(env, config):
+    env = wrap_preprocessors(env, config)
+    env = LowLevelWrapper(env, config)
+    env = PlannerWrapper(env, config)
     return env
 
 class LowLevelWrapper(gymnasium.ActionWrapper):
@@ -24,22 +33,60 @@ class LowLevelWrapper(gymnasium.ActionWrapper):
         self.paths = None
         self.prev_observations = None
         self.model_path = 'model/follower'
-        with open(join(self.path, 'config.json'), "r") as f:
-            flat_config = json.load(f)
-            flat_config = Namespace(**flat_config)
-        self.follower = create_actor_critic(flat_config, env.observation_space, env.action_space)
-        checkpoints = Learner.get_checkpoints(join(self.path, "checkpoint_p0"),
+        with open(join(self.model_path, 'config.json'), "r") as f:
+            self.model_config = json.load(f)
+            self.model_config = Namespace(**self.model_config)
+        self.follower = create_actor_critic(self.model_config, env.observation_space, env.action_space)
+        checkpoints = Learner.get_checkpoints(join(self.model_path, "checkpoint_p0"),
                                               "checkpoint_*")
-        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-        checkpoint_dict = Learner.load_checkpoint(checkpoints, device)
+        self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+        checkpoint_dict = Learner.load_checkpoint(checkpoints, self.device)
         self.follower.load_state_dict(checkpoint_dict['model'])
+        self.follower.eval()
+        self.follower.model_to_device(self.device)
 
+        self.rnn_states = None
+        
+    @staticmethod
+    def transform_dict_observations(observations):
+        """Transform list of dict observations into a dict of lists."""
+        obs_dict = dict()
+        if isinstance(observations[0], (dict, OrderedDict)):
+            for key in observations[0].keys():
+                if not isinstance(observations[0][key], str):
+                    obs_dict[key] = [o[key] for o in observations]
+        else:
+            # handle flat observations also as dict
+            obs_dict['obs'] = observations
+
+        for key, x in obs_dict.items():
+            obs_dict[key] = np.stack(x)
+
+        return obs_dict
     def set_path(self, paths):
         self.paths = paths
 
-    def action(self, action):
+    def act(self, observations):
+        self.rnn_states = torch.zeros([len(observations), get_rnn_size(self.model_config)], dtype=torch.float32,
+                                      device=self.device) if self.rnn_states is None else self.rnn_states
+        # print(observations[0])
+        # print("="*50)
+        
+        obs = AttrDict(self.transform_dict_observations(observations))
         with torch.no_grad():
-            action = self.follower(self.prev_observations)
+            # print(obs['obs'][0])
+            normalized_obs = prepare_and_normalize_obs(self.follower, obs)
+            # print(normalized_obs)
+            # print("normalized_obs shape", {k: v.shape for k, v in normalized_obs.items()})
+            policy_outputs = self.follower(normalized_obs, self.rnn_states)
+        # print(f"observations after prepare_and_normalize_obs:{obs}\n")
+        self.rnn_states = policy_outputs['new_rnn_states']
+        # print(policy_outputs['actions'])
+        # print(f"policy_outputs:, {policy_outputs}\n")
+        return policy_outputs['actions'].cpu().numpy()
+    
+    def action(self, action):
+        action = self.act(self.prev_observations)
         return action
 
     def step(self, action):
@@ -50,6 +97,7 @@ class LowLevelWrapper(gymnasium.ActionWrapper):
         return observation, reward, done, tr, info
 
     def reset(self, **kwargs):
+        self.rnn_states = None
         observations, infos = self.env.reset(**kwargs)
         self.prev_observations = observations
         return observations, infos
@@ -62,31 +110,42 @@ class PlannerWrapper(gymnasium.Wrapper):
         self.action_space = gymnasium.spaces.Box(
             low=0,
             high=10,
-            shape=(config.network_input_radius, config.network_input_radius),
+            shape=((2 * config.network_input_radius + 1) * (2 * config.network_input_radius + 1), ),
             dtype=np.float32
         )
         self.prev_observations = None
         self.planner = Planner(config)
         self.plan_window = 3
-
+        self.obs_radius = None
     def observation(self, observations):
+        observations = copy.deepcopy(observations)
         self.prev_observations = observations
-        obs_radius = len(observations[0]['obstacles']) // 2
+        self.obs_radius = len(observations[0]['obs'][0]) // 2
         self.planner.update(observations=observations)
         self.planner._agent.update_dist_mat(observations)
         mats = self.planner._agent.get_dist_mat()
-        mats = (mats - mats[obs_radius][obs_radius]) / obs_radius
+        mats = np.asarray(mats, dtype=np.float32)
+        mats = (mats - mats[self.obs_radius][self.obs_radius]) / self.obs_radius
         for k, mat in enumerate(mats):
             obs = observations[k]
             for y, row in enumerate(mat):
                 for x, val in enumerate(row):
-                    if obs['obstacles'][y, x] != -1:
-                        obs['obstacles'][y, x] = np.exp(-val)
+                    if obs['obs'][0][y, x] != -1:
+                        obs['obs'][0][y, x] = -val
                     else:
-                        obs['obstacles'][y, x] = -1
+                        obs['obs'][0][y, x] = -1
         return observations
     def step(self, action):
-        self.planner._agent.set_dynamic_cost(action, observations=self.prev_observations)
+        
+        action = np.clip(
+        action,
+        self.action_space.low,
+        self.action_space.high
+        )
+
+        cost_map = np.asarray(action, dtype=np.float64).reshape(len(action), 2 * self.obs_radius + 1, 2 * self.obs_radius + 1)
+
+        self.planner._agent.set_dynamic_cost(cost_map, observations=self.prev_observations)
         for _ in range(self.plan_window):
             paths = self.planner.get_path()
             self.env.set_path(paths)

@@ -51,26 +51,33 @@ class PathPlanner:
             self.obs_radius = len(cost_map[0]) // 2
         if self.planner is None:
             self.set_planner()
+        print("map")
+        print(cost_map[0])
         for k, p in enumerate(self.planner):
-            p.set_dynamic_cost(cost_map, (observations[k]['xy'][0] - self.obs_radius, observations[k]['xy'][1] - self.obs_radius))
+            p.set_dynamic_cost(cost_map[k], (int(observations[k]['xy'][0] - self.obs_radius), int(observations[k]['xy'][1] - self.obs_radius)), 
+                               (int(observations[k]['target_xy'][0]), int(observations[k]['target_xy'][1])))
 
     def update(self, obs):
         self.num_agents = len(obs)
-        self.obs_radius = len(obs[0]['obstacles']) // 2
+        # print(obs[0]['obs'][0])
+        self.obs_radius = len(obs[0]['obs'][0]) // 2
         if self.planner is None:
             self.set_planner()
 
         if self.results is None:
             self.results = [None] * self.num_agents
+        
         for k in range(self.num_agents):
-            if obs[k]['xy'] == obs[k]['target_xy']:
+            if tuple(obs[k]['xy']) == tuple(obs[k]['target_xy']):
                 continue
-            obs[k]['agents'][self.obs_radius][self.obs_radius] = 1
+            obs[k]['obs'][1][self.obs_radius][self.obs_radius] = 1
             self.planner[k].update_path(obs[k]['xy'], obs[k]['target_xy'])
+            print("start computing path !")
             self.results[k] = self.planner[k].get_path()
+            print("end compute path!")
     def update_dist_mat(self, obs):
         self.num_agents = len(obs)
-        self.obs_radius = len(obs[0]['obstacles']) // 2
+        self.obs_radius = len(obs[0]['obs'][0]) // 2
         if self.planner is None:
             self.set_planner()
         for k in range(self.num_agents):
