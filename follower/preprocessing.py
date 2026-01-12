@@ -134,9 +134,9 @@ class FollowerWrapper(ObservationWrapper):
         # Update the previous goals and intrinsic rewards for the next step.
         self.prev_goals = new_goals
         self.intrinsic_reward = intrinsic_rewards
-        print(observations[0]['obstacles'])
-        print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
-        print('-'*50)
+        # print(observations[0]['obstacles'])
+        # print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
+        # print('-'*50)
         # print("reward", self.intrinsic_reward[0])
         return observations
 

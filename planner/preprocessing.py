@@ -125,15 +125,21 @@ class PlannerWrapper(gymnasium.Wrapper):
         self.planner._agent.update_dist_mat(observations)
         mats = self.planner._agent.get_dist_mat()
         mats = np.asarray(mats, dtype=np.float32)
-        mats = (mats - mats[self.obs_radius][self.obs_radius]) / self.obs_radius
+        center = mats[:, self.obs_radius, self.obs_radius][:, None, None]
+        mats = mats - center
+        mats = np.where(mats > 1e7, 2 * self.obs_radius, mats) / center
+        mats = np.exp(mats) - 1
         for k, mat in enumerate(mats):
             obs = observations[k]
             for y, row in enumerate(mat):
                 for x, val in enumerate(row):
                     if obs['obs'][0][y, x] != -1:
-                        obs['obs'][0][y, x] = -val
+                        obs['obs'][0][y, x] = val
                     else:
                         obs['obs'][0][y, x] = -1
+        # print('obs')
+        # print(obs['obs'][0][self.obs_radius, self.obs_radius])
+        # print(obs['obs'][0])
         return observations
     def step(self, action):
         

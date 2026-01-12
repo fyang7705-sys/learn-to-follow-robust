@@ -51,8 +51,8 @@ class PathPlanner:
             self.obs_radius = len(cost_map[0]) // 2
         if self.planner is None:
             self.set_planner()
-        print("map")
-        print(cost_map[0])
+        # print("map")
+        # print(cost_map[0])
         for k, p in enumerate(self.planner):
             p.set_dynamic_cost(cost_map[k], (int(observations[k]['xy'][0] - self.obs_radius), int(observations[k]['xy'][1] - self.obs_radius)), 
                                (int(observations[k]['target_xy'][0]), int(observations[k]['target_xy'][1])))
@@ -72,9 +72,9 @@ class PathPlanner:
                 continue
             obs[k]['obs'][1][self.obs_radius][self.obs_radius] = 1
             self.planner[k].update_path(obs[k]['xy'], obs[k]['target_xy'])
-            print("start computing path !")
+            # print("start computing path !")
             self.results[k] = self.planner[k].get_path()
-            print("end compute path!")
+            # print("end compute path!")
     def update_dist_mat(self, obs):
         self.num_agents = len(obs)
         self.obs_radius = len(obs[0]['obs'][0]) // 2
