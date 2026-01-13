@@ -73,7 +73,7 @@ class PathPlanner:
             obs[k]['obs'][1][self.obs_radius][self.obs_radius] = 1
             self.planner[k].update_path(obs[k]['xy'], obs[k]['target_xy'])
             # print("start computing path !")
-            self.results[k] = self.planner[k].get_path()
+            
             # print("end compute path!")
     def update_dist_mat(self, obs):
         self.num_agents = len(obs)
@@ -84,6 +84,8 @@ class PathPlanner:
             self.planner[k].update_dist_mat(obs[k]['xy'], obs[k]['target_xy'])
 
     def get_path(self):
+        for k in range(self.num_agents):
+            self.results[k] = self.planner[k].get_path()
         return self.results
 
     def get_dist_mat(self):

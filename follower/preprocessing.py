@@ -97,7 +97,8 @@ class FollowerWrapper(ObservationWrapper):
         # paths = self.re_plan.get_path()
         paths = self.paths
         if paths is None:
-            paths = []
+            self.re_plan.update(observations)
+            paths = self.re_plan.get_path()
         new_goals = []  # Initialize a list to store new goals for each agent.
         intrinsic_rewards = []  # Initialize a list to store intrinsic rewards for each agent.
 
@@ -112,6 +113,11 @@ class FollowerWrapper(ObservationWrapper):
             else:
                 if obs['xy'] in path:
                     path = path[path.index(obs['xy']):]
+                else:
+                    self.re_plan._agent.planner[k].update_path(obs['xy'], path[0])
+                    path_extra = self.re_plan._agent.planner[k].get_path()
+                    path = path_extra[:-1] + path
+                paths[k] = path
                 # Check if the agent reached their subgoal from its previous step
                 subgoal_achieved = self.prev_goals and obs['xy'] == self.prev_goals[k]
                 # Assign an intrinsic reward if conditions are met, otherwise set it to 0.
@@ -136,6 +142,7 @@ class FollowerWrapper(ObservationWrapper):
         self.intrinsic_reward = intrinsic_rewards
         # print(observations[0]['obstacles'])
         # print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
+        # print(paths[0])
         # print('-'*50)
         # print("reward", self.intrinsic_reward[0])
         return observations
