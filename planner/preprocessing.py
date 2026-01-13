@@ -129,11 +129,10 @@ class PlannerWrapper(gymnasium.Wrapper):
     def observation(self, observations):
         observations = copy.deepcopy(observations)
         self.prev_observations = observations
+
         self.obs_radius = len(observations[0]['obs'][0]) // 2
         self.planner.update(observations=observations)
-        self.planner._agent.update_dist_mat(observations)
-        mats = self.planner._agent.get_dist_mat()
-        
+        mats = self.planner._agent.get_dist_mat(observations)
         # print(np.array2string(
         # observations[0]['obs'][0],
         # precision=2,
@@ -156,8 +155,8 @@ class PlannerWrapper(gymnasium.Wrapper):
         return observations
 
     def goal_seeking(self, observations):
-        self.planner._agent.update_dist_mat(observations)
-        goal_maps = self.planner._agent.get_dist_mat()
+        self.planner.update(observations=observations)
+        goal_maps = self.planner._agent.get_dist_mat(observations)
         # print("goal maps")
         # print(goal_maps[0])
         return -goal_maps
@@ -212,15 +211,31 @@ class PlannerWrapper(gymnasium.Wrapper):
         return cost_maps  
                   
     def step(self, action):
+        num_agents = len(self.prev_observations)
         cost_map = self.cost_map(self.prev_observations, action)
         cost_map = np.clip(cost_map, 0.0, 1e6)
 
         self.planner._agent.set_dynamic_cost(cost_map, observations=self.prev_observations)
+        paths_len = np.zeros((num_agents,), dtype=np.float32)
         for _ in range(self.plan_window):
-            paths = self.planner.get_path()
+            paths = self.planner.get_path()    
             self.env.set_path(paths)
             observation, reward, done, tr, info = self.env.step(0)
+            
+            # reward += 0.1 * reward
+            for k in range(num_agents):
+                paths_len[k] += len(paths[k])
+                if info[k]['on_goal'] == True:
+                    reward[k] += 10
             self.planner.update(observations=observation)
+        
+        for k in range(num_agents):
+            reward[k] = 0
+            prev_dist = self.planner._agent.planner[k].get_dist_to_goal(self.prev_observations[k]['xy'])
+            dist = self.planner._agent.planner[k].get_dist_to_goal(observation[k]['xy']) 
+            reward[k] += (prev_dist - dist) / self.plan_window
+            reward[k] -= 0.01 * paths_len[k] / self.plan_window
+        print("reward", reward[0])
         return self.observation(observation), reward, done, tr, info
 
     def reset_state(self):

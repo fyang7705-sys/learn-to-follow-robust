@@ -15,6 +15,7 @@ PYBIND11_MODULE(planner, m) {
             .def("update_occupations", &planner::update_occupations)
             .def("update_dist_mat", &planner::update_dist_mat)
             .def("get_dist_mat", &planner::get_dist_mat)
-            .def("set_dynamic_cost", &planner::set_dynamic_cost);
+            .def("set_dynamic_cost", &planner::set_dynamic_cost)
+            .def("get_dist_to_goal", &planner::get_dist_to_goal);
 }
 

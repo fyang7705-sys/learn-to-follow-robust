@@ -71,25 +71,19 @@ class PathPlanner:
             if tuple(obs[k]['xy']) == tuple(obs[k]['target_xy']):
                 continue
             obs[k]['obs'][1][self.obs_radius][self.obs_radius] = 1
-            self.planner[k].update_path(obs[k]['xy'], obs[k]['target_xy'])
+            self.planner[k].update_path(obs[k]['xy'], obs[k]['target_xy']) # 同时会更新dist_mat
             # print("start computing path !")
             
             # print("end compute path!")
-    def update_dist_mat(self, obs):
-        self.num_agents = len(obs)
-        self.obs_radius = len(obs[0]['obs'][0]) // 2
-        if self.planner is None:
-            self.set_planner()
-        for k in range(self.num_agents):
-            self.planner[k].update_dist_mat(obs[k]['xy'], obs[k]['target_xy'])
+
 
     def get_path(self):
         for k in range(self.num_agents):
             self.results[k] = self.planner[k].get_path()
         return self.results
 
-    def get_dist_mat(self):
-        mats =  [p.get_dist_mat(self.obs_radius) for p in self.planner]
+    def get_dist_mat(self, observations):
+        mats =  [p.get_dist_mat(self.obs_radius, observations[k]['xy']) for k,p in enumerate(self.planner)]
         
         mats = np.asarray(mats, dtype=np.float32)
         center = mats[:, self.obs_radius, self.obs_radius][:, None, None]
@@ -99,7 +93,7 @@ class PathPlanner:
         mats = np.exp(mats) - 1
         # mats = np.clip(np.exp(mats) - 1, 0, 1e3)
         return mats
-        
+    
 
 class Planner:
     def __init__(self, cfg: PlannerConfig):

@@ -68,6 +68,7 @@ class planner
     std::vector<std::vector<float>> num_occupations;
     std::vector<std::vector<float>> penalties;
     std::vector<std::vector<float>> h_values;
+    std::vector<std::vector<float>> dist_mat;
     std::vector<std::vector<Node>> nodes;
     std::list<std::list<std::pair<int, int>>> focal_paths;
     std::list<std::pair<int, int>> dynamic_obstacles;
@@ -500,6 +501,7 @@ public:
         nodes = std::vector<std::vector<Node>>(grid.size(), std::vector<Node>(grid.front().size(), Node()));
         num_occupations = std::vector<std::vector<float>>(grid.size(), std::vector<float>(grid.front().size(), 0));
         penalties = std::vector<std::vector<float>>(grid.size(), std::vector<float>(grid.front().size(), 1));
+        dist_mat = std::vector<std::vector<float>>(grid.size(), std::vector<float>(grid.front().size(), INF));
         rng.seed(std::chrono::steady_clock::now().time_since_epoch().count());
         dist_g_weight = std::uniform_real_distribution<float>(0, 1);
         diversity_map = std::vector<std::vector<float>>(grid.size(), std::vector<float>(grid.front().size(), 0));
@@ -588,7 +590,10 @@ public:
         g = {g.first + abs_offset.first, g.second + abs_offset.second};
         start = s;
         if(goal != g)
+        {    
             update_h_values(g);
+            update_dist_mat(s, g);
+        }
         goal = g;
         reset();
     }
@@ -606,21 +611,12 @@ public:
 
     void update_dist_mat(std::pair<int, int> s, std::pair<int, int> g)
     {
-        s = {s.first + abs_offset.first, s.second + abs_offset.second};
-        g = {g.first + abs_offset.first, g.second + abs_offset.second};
-        start = s;
-        goal = g;
-    }
-
-    std::vector<std::vector<float>> get_dist_mat(int obs_radius)
-    {
-        std::vector<std::vector<float>> dist_agent(obs_radius * 2 + 1, std::vector<float>(obs_radius * 2 + 1, INF));
+        dist_mat = std::vector<std::vector<float>>(grid.size(), std::vector<float>(grid.front().size(), INF));
         std::vector<std::vector<bool>> visited(grid.size(), std::vector<bool>(grid.front().size(), false));
-        std::vector<std::vector<float>> dist_mat(grid.size(), std::vector<float>(grid.front().size(), INF));
-        visited[goal.first][goal.second] = false;
-        dist_mat[goal.first][goal.second] = 0;
+        visited[g.first][g.second] = false;
+        dist_mat[g.first][g.second] = 0;
         std::priority_queue<Node, std::vector<Node>, std::greater<Node>> OPEN;
-        OPEN.push(Node(goal.first, goal.second, 0, 0));
+        OPEN.push(Node(g.first, g.second, 0, 0));
         while(!OPEN.empty())
         {
             Node current = OPEN.top();
@@ -637,13 +633,24 @@ public:
                 }
             }
         }
+    }
+
+    std::vector<std::vector<float>> get_dist_mat(int obs_radius, std::pair<int, int> cur_pos)
+    {
+        cur_pos = {cur_pos.first + abs_offset.first, cur_pos.second + abs_offset.second};
+        std::vector<std::vector<float>> dist_agent(obs_radius * 2 + 1, std::vector<float>(obs_radius * 2 + 1, INF));
         for(int i = 0; i < obs_radius * 2 + 1; i++)
             for(int j = 0; j < obs_radius * 2 + 1; j++)
-                dist_agent[i][j] = dist_mat[start.first + i - obs_radius][start.second + j - obs_radius];
-        
+                dist_agent[i][j] = dist_mat[cur_pos.first + i - obs_radius][cur_pos.second + j - obs_radius];
         return dist_agent;
     }
     
+    float get_dist_to_goal(std::pair<int, int> cur_pos)
+    {
+        cur_pos = {cur_pos.first + abs_offset.first, cur_pos.second + abs_offset.second};
+        return dist_mat[cur_pos.first][cur_pos.second];
+    }
+
     std::list<std::list<std::pair<int, int>>> get_focal_paths()
     {
         return focal_paths;
