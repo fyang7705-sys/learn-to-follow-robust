@@ -17,6 +17,7 @@ from sample_factory.utils.utils import log
 from sample_factory.utils.attr_dict import AttrDict
 from collections import OrderedDict
 import copy
+from scipy.ndimage import distance_transform_edt
 
 
 def planner_preprocessor(env, config):
@@ -107,16 +108,24 @@ class PlannerWrapper(gymnasium.Wrapper):
     def __init__(self, env, config):
         super().__init__(env)
         self.config = config
+        self.latent_dim = 3
         self.action_space = gymnasium.spaces.Box(
             low=0,
             high=10,
-            shape=((2 * config.network_input_radius + 1) * (2 * config.network_input_radius + 1), ),
+            # shape=((2 * config.network_input_radius + 1) * (2 * config.network_input_radius + 1), ),
+            shape = (self.latent_dim,),
             dtype=np.float32
         )
         self.prev_observations = None
         self.planner = Planner(config)
         self.plan_window = 3
         self.obs_radius = None
+        self.cost_basis = [
+        self.goal_seeking,
+        self.obstacle_avoidance,
+        self.agent_avoidance,
+        ]
+
     def observation(self, observations):
         observations = copy.deepcopy(observations)
         self.prev_observations = observations
@@ -124,32 +133,87 @@ class PlannerWrapper(gymnasium.Wrapper):
         self.planner.update(observations=observations)
         self.planner._agent.update_dist_mat(observations)
         mats = self.planner._agent.get_dist_mat()
-        mats = np.asarray(mats, dtype=np.float32)
-        center = mats[:, self.obs_radius, self.obs_radius][:, None, None]
-        mats = mats - center
-        mats = np.where(mats > 1e7, 2 * self.obs_radius, mats) / center
-        mats = np.exp(mats) - 1
-        for k, mat in enumerate(mats):
-            obs = observations[k]
-            for y, row in enumerate(mat):
-                for x, val in enumerate(row):
-                    if obs['obs'][0][y, x] != -1:
-                        obs['obs'][0][y, x] = val
-                    else:
-                        obs['obs'][0][y, x] = -1
-        # print('obs')
-        # print(obs['obs'][0][self.obs_radius, self.obs_radius])
-        # print(obs['obs'][0])
-        return observations
-    def step(self, action):
         
-        action = np.clip(
-        action,
-        self.action_space.low,
-        self.action_space.high
-        )
+        # print(np.array2string(
+        # observations[0]['obs'][0],
+        # precision=2,
+        # suppress_small=True
+        # ))
+        for k, mat in enumerate(mats):
+            obs_map = observations[k]['obs'][0]
+            observations[k]['obs'][0] = np.where(obs_map != -1, mat, -1)
+            # print('obs')
+            # print(obs['obs'][0][self.obs_radius, self.obs_radius])
+            # print(obs['obs'][1])
+        # print(observations[0]['xy'])
+        # print(observations[0]['target_xy'])
+        # print(np.array2string(
+        # observations[0]['obs'][0],
+        # precision=2,
+        # suppress_small=True
+        # ))
+        # print('-'*50)
+        return observations
 
-        cost_map = np.asarray(action, dtype=np.float64).reshape(len(action), 2 * self.obs_radius + 1, 2 * self.obs_radius + 1)
+    def goal_seeking(self, observations):
+        self.planner._agent.update_dist_mat(observations)
+        goal_maps = self.planner._agent.get_dist_mat()
+        # print("goal maps")
+        # print(goal_maps[0])
+        return -goal_maps
+
+    def obstacle_avoidance(self, observations, sigma=1.5):
+        B = len(observations)
+        H, W = observations[0]['obs'][0].shape
+        obstacle_maps = np.zeros((B, H, W), dtype=np.float32)
+        for k, o in enumerate(observations):
+            obs = o['obs'][0]
+            free_mask = (obs != -1)
+            clearance = distance_transform_edt(free_mask)
+            phi_clear = np.exp(-clearance / sigma)
+            phi_clear[~free_mask] = 1
+
+            obstacle_maps[k] = phi_clear
+        # print("obstacle maps")
+        # print(obstacle_maps[0])
+        return obstacle_maps
+    
+    def agent_avoidance(self, observations, sigma=2.0):
+        B = len(observations)
+        H, W = observations[0]['obs'][1].shape
+
+        agent_maps = np.zeros((B, H, W), dtype=np.float32)
+        ys, xs = np.meshgrid(np.arange(H), np.arange(W), indexing='ij')
+        for k, o in enumerate(observations):
+            obs = o['obs'][1]
+            potential = np.zeros((H, W), dtype=np.float32)
+            agent_positions = np.argwhere(obs > 0)
+            for ay, ax in agent_positions:
+                if ay == H // 2 and ax == W // 2:
+                    continue
+                dy = ys - ay
+                dx = xs - ax
+                dist2 = dy * dy + dx * dx
+                potential += np.exp(-dist2 / (2 * sigma * sigma))
+            agent_maps[k] = potential / len(agent_positions)
+        # print("agent maps")
+        # print(agent_maps[0])
+        return agent_maps
+    
+    def cost_map(self, observations, action):
+        action = np.array(action)
+        B = len(observations)
+        H, W = observations[0]['obs'][1].shape
+        cost_maps = np.zeros((B, H, W), dtype=np.float32)
+        for i, phi in enumerate(self.cost_basis):
+            cost_maps += action[:, i][:, None, None] * phi(observations)     
+        # print("cost maps")
+        # print(cost_maps[0])
+        return cost_maps  
+                  
+    def step(self, action):
+        cost_map = self.cost_map(self.prev_observations, action)
+        cost_map = np.clip(cost_map, 0.0, 1e6)
 
         self.planner._agent.set_dynamic_cost(cost_map, observations=self.prev_observations)
         for _ in range(self.plan_window):

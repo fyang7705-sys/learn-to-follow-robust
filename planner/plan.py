@@ -87,7 +87,17 @@ class PathPlanner:
         return self.results
 
     def get_dist_mat(self):
-        return [p.get_dist_mat(self.obs_radius) for p in self.planner]
+        mats =  [p.get_dist_mat(self.obs_radius) for p in self.planner]
+        
+        mats = np.asarray(mats, dtype=np.float32)
+        center = mats[:, self.obs_radius, self.obs_radius][:, None, None]
+        center = np.maximum(center, 1)
+        mats = center - mats
+        mats = np.where(mats > 1e6, 2 * self.obs_radius, mats) / center
+        mats = np.exp(mats) - 1
+        # mats = np.clip(np.exp(mats) - 1, 0, 1e3)
+        return mats
+        
 
 class Planner:
     def __init__(self, cfg: PlannerConfig):

@@ -630,7 +630,6 @@ public:
             for(auto n: get_neighbors({current.i, current.j})) {
                 float cost(1);
                 if(use_static_cost) cost = penalties[n.first][n.second];
-                if(use_dynamic_cost) cost += num_occupations[n.first][n.second];
                 if(dist_mat[n.first][n.second] > dist_mat[current.i][current.j] + cost)
                 {
                     dist_mat[n.first][n.second] = dist_mat[current.i][current.j] + cost;
