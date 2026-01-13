@@ -235,7 +235,7 @@ class PlannerWrapper(gymnasium.Wrapper):
             dist = self.planner._agent.planner[k].get_dist_to_goal(observation[k]['xy']) 
             reward[k] += (prev_dist - dist) / self.plan_window
             reward[k] -= 0.01 * paths_len[k] / self.plan_window
-        print("reward", reward[0])
+        # print("reward", reward[0])
         return self.observation(observation), reward, done, tr, info
 
     def reset_state(self):
