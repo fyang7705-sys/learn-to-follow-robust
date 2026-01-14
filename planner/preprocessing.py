@@ -20,7 +20,11 @@ import copy
 from scipy.ndimage import distance_transform_edt
 
 
-def planner_preprocessor(env, config):
+def planner_preprocessor(env, algo_config):
+    env = planner_wrap_preprocessor(env, algo_config.preprocessing)
+    return env
+
+def planner_wrap_preprocessor(env, config):
     env = wrap_preprocessors(env, config)
     env = LowLevelWrapper(env, config)
     env = PlannerWrapper(env, config)
@@ -64,6 +68,7 @@ class LowLevelWrapper(gymnasium.ActionWrapper):
             obs_dict[key] = np.stack(x)
 
         return obs_dict
+
     def set_path(self, paths):
         self.paths = paths
 
@@ -72,7 +77,14 @@ class LowLevelWrapper(gymnasium.ActionWrapper):
                                       device=self.device) if self.rnn_states is None else self.rnn_states
         # print(observations[0])
         # print("="*50)
-        
+        r = observations[0]['obs'][0].shape[0] // 2
+        for k, obs in enumerate(observations):
+            for idx, (gx, gy) in enumerate(self.paths[k]):
+                x, y = self.get_relative_xy(*obs['xy'], gx, gy, r)
+                if x is not None and y is not None:
+                    obs['obs'][0][x, y] = 1.0
+                else:
+                    break
         obs = AttrDict(self.transform_dict_observations(observations))
         with torch.no_grad():
             # print(obs['obs'][0])
@@ -82,7 +94,12 @@ class LowLevelWrapper(gymnasium.ActionWrapper):
             policy_outputs = self.follower(normalized_obs, self.rnn_states)
         # print(f"observations after prepare_and_normalize_obs:{obs}\n")
         self.rnn_states = policy_outputs['new_rnn_states']
-        # print(policy_outputs['actions'])
+        # print('='*50)
+        # print(observations[0]['obs'][0])
+        # print("xy", observations[0]['xy'], "target_xy", observations[0]['target_xy'])
+        # print(policy_outputs['actions'][0])
+        # print(self.paths[0])
+        
         # print(f"policy_outputs:, {policy_outputs}\n")
         return policy_outputs['actions'].cpu().numpy()
     
@@ -91,7 +108,6 @@ class LowLevelWrapper(gymnasium.ActionWrapper):
         return action
 
     def step(self, action):
-        self.env.set_path(self.paths)
         
         observation, reward, done, tr, info = self.env.step(self.action(action))
         self.prev_observations = observation
@@ -217,25 +233,39 @@ class PlannerWrapper(gymnasium.Wrapper):
 
         self.planner._agent.set_dynamic_cost(cost_map, observations=self.prev_observations)
         paths_len = np.zeros((num_agents,), dtype=np.float32)
+        on_goal = np.zeros((num_agents,), dtype=np.float32)
         for _ in range(self.plan_window):
             paths = self.planner.get_path()    
             self.env.set_path(paths)
             observation, reward, done, tr, info = self.env.step(0)
-            
+            # print("** xy", observation[0]['xy'], "** target_xy", observation[0]['target_xy'])
+            self.planner.update(observations=observation) # update cur_pos and cur_goal
             # reward += 0.1 * reward
             for k in range(num_agents):
                 paths_len[k] += len(paths[k])
+                reward[k] = 0                               
                 if info[k]['on_goal'] == True:
-                    reward[k] += 10
-            self.planner.update(observations=observation)
-        
+                    on_goal[k] += 1
+            # print("done", done[0])
+            # print("tr", tr[0])
+            # print("info", info[0])
         for k in range(num_agents):
-            reward[k] = 0
+            
             prev_dist = self.planner._agent.planner[k].get_dist_to_goal(self.prev_observations[k]['xy'])
             dist = self.planner._agent.planner[k].get_dist_to_goal(observation[k]['xy']) 
             reward[k] += (prev_dist - dist) / self.plan_window
             reward[k] -= 0.01 * paths_len[k] / self.plan_window
+            reward[k] += on_goal[k] * 10
+        # print('*'*50)
+        # print(np.array2string(
+        #     cost_map[0],
+        #     precision=1,
+        #     suppress_small=True
+        # ))
+
         # print("reward", reward[0])
+        # print('*'*50)
+        # print("key", info[0].keys())
         return self.observation(observation), reward, done, tr, info
 
     def reset_state(self):

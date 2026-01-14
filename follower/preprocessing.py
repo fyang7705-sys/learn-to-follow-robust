@@ -86,7 +86,7 @@ class FollowerWrapper(ObservationWrapper):
         dx, dy = x - tx, y - ty
         if dx > obs_radius or dx < -obs_radius or dy > obs_radius or dy < -obs_radius:
             return None, None
-        return obs_radius - dx, obs_radius - dy
+        return int(obs_radius - dx), int(obs_radius - dy)
     def set_path(self, paths):
         self.paths = paths
     def observation(self, observations):
@@ -101,7 +101,6 @@ class FollowerWrapper(ObservationWrapper):
             paths = self.re_plan.get_path()
         new_goals = []  # Initialize a list to store new goals for each agent.
         intrinsic_rewards = []  # Initialize a list to store intrinsic rewards for each agent.
-
         # Iterate through agents and their respective paths.
         for k, path in enumerate(paths):
             obs = observations[k]
@@ -129,20 +128,20 @@ class FollowerWrapper(ObservationWrapper):
             obs['obstacles'][obs['obstacles'] > 0] *= -1
 
             # Adding path to the observation, setting path values to +1.0.
-            r = obs['obstacles'].shape[0] // 2
-            for idx, (gx, gy) in enumerate(path):
-                x, y = self.get_relative_xy(*obs['xy'], gx, gy, r)
-                if x is not None and y is not None:
-                    obs['obstacles'][x, y] = 1.0
-                else:
-                    break
+            # r = obs['obstacles'].shape[0] // 2
+            # for idx, (gx, gy) in enumerate(path):
+            #     x, y = self.get_relative_xy(*obs['xy'], gx, gy, r)
+            #     if x is not None and y is not None:
+            #         obs['obstacles'][x, y] = 1.0
+            #     else:
+            #         break
             # print(obs['obstacles'])
         # Update the previous goals and intrinsic rewards for the next step.
         self.prev_goals = new_goals
         self.intrinsic_reward = intrinsic_rewards
         # print(observations[0]['obstacles'])
+        
         # print("xy", observations[0]['xy'], 'target', observations[0]['target_xy'])
-        # print(paths[0])
         # print('-'*50)
         # print("reward", self.intrinsic_reward[0])
         return observations

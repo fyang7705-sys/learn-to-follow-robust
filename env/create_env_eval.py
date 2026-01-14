@@ -3,6 +3,7 @@ from gymnasium import ActionWrapper
 from typing import List, Optional
 import numpy as np
 from pogema_toolbox.create_env import create_env_base
+import gymnasium
 
 class BugEnvironment(Environment, ):
     bug_probs: List[float] = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
@@ -39,8 +40,24 @@ class BugActionWrapper(ActionWrapper):
         self.episode += 1
         return observations, infos
 
+class IfOnGoalWrapper(gymnasium.Wrapper):
+    def __init__(self, env):
+        super().__init__(env)
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        for k, r in enumerate(reward):
+            if r:
+                info[k]['on_goal'] = True
+            else:
+                info[k]['on_goal'] = False
+        return obs, reward, terminated, truncated, info
+
+
+
 def create_env_eval(config: BugEnvironment):
     env = create_env_base(config=config)
+    env = IfOnGoalWrapper(env)
     env = BugActionWrapper(env, config)
     return env
     

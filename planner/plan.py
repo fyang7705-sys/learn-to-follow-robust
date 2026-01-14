@@ -45,12 +45,7 @@ class PathPlanner:
             for p in self.planner:
                 p.set_penalties(penalties)
     def set_dynamic_cost(self, cost_map, observations):
-        if self.num_agents is None:
-            self.num_agents = len(cost_map)
-        if self.obs_radius is None:
-            self.obs_radius = len(cost_map[0]) // 2
-        if self.planner is None:
-            self.set_planner()
+        self.update(observations)
         # print("map")
         # print(cost_map[0])
         for k, p in enumerate(self.planner):
@@ -70,7 +65,6 @@ class PathPlanner:
         for k in range(self.num_agents):
             if tuple(obs[k]['xy']) == tuple(obs[k]['target_xy']):
                 continue
-            obs[k]['obs'][1][self.obs_radius][self.obs_radius] = 1
             self.planner[k].update_path(obs[k]['xy'], obs[k]['target_xy']) # 同时会更新dist_mat
             # print("start computing path !")
             

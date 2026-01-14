@@ -14,7 +14,7 @@ from pogema import GridConfig
 
 from env.custom_maps import MAPS_REGISTRY
 from follower.preprocessing import wrap_preprocessors, PreprocessorConfig
-from env.create_env_eval import BugActionWrapper, BugEnvironment
+from env.create_env_eval import BugActionWrapper, IfOnGoalWrapper
 
 class ProvideGlobalObstacles(gymnasium.Wrapper):
     def get_global_obstacles(self):
@@ -96,18 +96,7 @@ class MultiMapWrapper(gymnasium.Wrapper):
             self.env.unwrapped.grid_config.seed = seed
         return self.env.reset(seed=seed, **kwargs)
 
-class IfOnGoalWrapper(gymnasium.Wrapper):
-    def __init__(self, env):
-        super().__init__(env)
 
-    def step(self, action):
-        obs, reward, terminated, truncated, info = self.env.step(action)
-        for k, r in enumerate(reward):
-            if r:
-                info[k]['on_goal'] = True
-            else:
-                info[k]['on_goal'] = False
-        return obs, reward, terminated, truncated, info
 
 def main():
     env = create_env_base(config=Environment())

@@ -10,13 +10,13 @@ from follower.training_config import Environment, EnvironmentMazes
 from env.create_env_eval import BugEnvironment
 
 from follower.preprocessing import PreprocessorConfig, wrap_preprocessors
-from planner.preprocessing import planner_preprocessor
+from planner.preprocessing import planner_wrap_preprocessor
 
 def create_env(environment_cfg: EnvironmentMazes, preprocessing_cfg: PreprocessorConfig):
     # log.error(f"preprocessing_cfg.inference_net.task_embedding_size: {preprocessing_cfg.inference_net.task_embedding_size}")
     env = create_bug_env(environment_cfg)
     # env = wrap_preprocessors(env, config=preprocessing_cfg, auto_reset=True)
-    env = planner_preprocessor(env, config=preprocessing_cfg)
+    env = planner_wrap_preprocessor(env, config=preprocessing_cfg)
     return env
 
 
