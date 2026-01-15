@@ -1,7 +1,7 @@
 import gymnasium
 import numpy as np
 from planner.plan import Planner
-from follower.preprocessing import wrap_preprocessors
+from follower.preprocessing import wrap_preprocessors, AutoResetWrapper
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.model.model_utils import get_rnn_size
 from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
@@ -28,6 +28,7 @@ def planner_wrap_preprocessor(env, config):
     env = wrap_preprocessors(env, config)
     env = LowLevelWrapper(env, config)
     env = PlannerWrapper(env, config)
+    env = AutoResetWrapper(env)
     return env
 
 class LowLevelWrapper(gymnasium.ActionWrapper):
@@ -249,7 +250,7 @@ class PlannerWrapper(gymnasium.Wrapper):
         num_agents = len(self.prev_observations)
         # print('*'*50)
         cost_map = self.cost_map(self.prev_observations, action)
-        cost_map = np.clip(cost_map, 0.0, 0)
+        cost_map = np.clip(cost_map, 0.0, 1e6)
         # print("cost_map")
         # print(np.array2string(
         #     cost_map[0],
@@ -268,8 +269,8 @@ class PlannerWrapper(gymnasium.Wrapper):
             self.planner.update(observations=observation) # update cur_pos and cur_goal
             # reward += 0.1 * reward
             if tr[0] == True:
-                # print("truncated", tr[0])
-                # print("avg_throughout", info[0]['metrics'])
+                print("truncated", tr[0])
+                print("avg_throughout", info[0])
                 # print("avg_throughout_local", self.arrive_instances / 512)
                 self.arrive_instances = 0
             # if 'metrics' in info:
