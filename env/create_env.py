@@ -26,7 +26,7 @@ class ProvideGlobalObstacles(gymnasium.Wrapper):
 
 def create_env_base(config: Environment):
     env = pogema_v0(grid_config=config.grid_config)
-    env = IfOnGoalWrapper(env)
+    
     env = ProvideGlobalObstacles(env)
     if config.use_maps:
         env = MultiMapWrapper(env)
@@ -40,6 +40,7 @@ def create_env_base(config: Environment):
 def create_bug_env(config: EnvironmentMazes):
     
     env = create_env_base(config=config)
+    env = IfOnGoalWrapper(env)
     env = BugActionWrapper(env, config)
     return env
 

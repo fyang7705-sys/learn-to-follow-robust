@@ -134,18 +134,18 @@ class PlannerWrapper(gymnasium.Wrapper):
         )
         self.prev_observations = None
         self.planner = Planner(config)
-        self.plan_window = 3
+        self.plan_window = 1
         self.obs_radius = None
         self.cost_basis = [
         self.goal_seeking,
         self.obstacle_avoidance,
         self.agent_avoidance,
         ]
+        self.arrive_instances = 0
 
     def observation(self, observations):
         observations = copy.deepcopy(observations)
-        self.prev_observations = observations
-
+        self.prev_observations = copy.deepcopy(observations)
         self.obs_radius = len(observations[0]['obs'][0]) // 2
         self.planner.update(observations=observations)
         mats = self.planner._agent.get_dist_mat(observations)
@@ -193,7 +193,7 @@ class PlannerWrapper(gymnasium.Wrapper):
         # print(obstacle_maps[0])
         return obstacle_maps
     
-    def agent_avoidance(self, observations, sigma=2.0):
+    def agent_avoidance(self, observations, sigma=0.8):
         B = len(observations)
         H, W = observations[0]['obs'][1].shape
 
@@ -210,7 +210,7 @@ class PlannerWrapper(gymnasium.Wrapper):
                 dx = xs - ax
                 dist2 = dy * dy + dx * dx
                 potential += np.exp(-dist2 / (2 * sigma * sigma))
-            agent_maps[k] = potential / len(agent_positions)
+            agent_maps[k] = potential / max(len(agent_positions), 1)
         # print("agent maps")
         # print(agent_maps[0])
         return agent_maps
@@ -219,18 +219,44 @@ class PlannerWrapper(gymnasium.Wrapper):
         action = np.array(action)
         B = len(observations)
         H, W = observations[0]['obs'][1].shape
+        # print('obs')
+        # print(np.array2string(
+        #     observations[0]['obs'][0],
+        #     precision=1,
+        #     suppress_small=True
+        #     ))
+        # print('agent')
+        # print(np.array2string(
+        #     observations[0]['obs'][1],
+        #     precision=1,
+        #     suppress_small=True
+        #     ))
         cost_maps = np.zeros((B, H, W), dtype=np.float32)
         for i, phi in enumerate(self.cost_basis):
-            cost_maps += action[:, i][:, None, None] * phi(observations)     
+            cost_basis = phi(observations)
+            # print(action[0, i])
+            # print(np.array2string(
+            # cost_basis[0],
+            # precision=1,
+            # suppress_small=True
+            # ))
+            cost_maps += action[:, i][:, None, None] * cost_basis   
         # print("cost maps")
         # print(cost_maps[0])
         return cost_maps  
                   
     def step(self, action):
         num_agents = len(self.prev_observations)
+        # print('*'*50)
         cost_map = self.cost_map(self.prev_observations, action)
-        cost_map = np.clip(cost_map, 0.0, 1e6)
-
+        cost_map = np.clip(cost_map, 0.0, 0)
+        # print("cost_map")
+        # print(np.array2string(
+        #     cost_map[0],
+        #     precision=1,
+        #     suppress_small=True
+        # ))
+        # print('*'*50)
         self.planner._agent.set_dynamic_cost(cost_map, observations=self.prev_observations)
         paths_len = np.zeros((num_agents,), dtype=np.float32)
         on_goal = np.zeros((num_agents,), dtype=np.float32)
@@ -241,28 +267,29 @@ class PlannerWrapper(gymnasium.Wrapper):
             # print("** xy", observation[0]['xy'], "** target_xy", observation[0]['target_xy'])
             self.planner.update(observations=observation) # update cur_pos and cur_goal
             # reward += 0.1 * reward
+            if tr[0] == True:
+                # print("truncated", tr[0])
+                # print("avg_throughout", info[0]['metrics'])
+                # print("avg_throughout_local", self.arrive_instances / 512)
+                self.arrive_instances = 0
+            # if 'metrics' in info:
+            #     print("info", info[0])    
             for k in range(num_agents):
                 paths_len[k] += len(paths[k])
                 reward[k] = 0                               
                 if info[k]['on_goal'] == True:
                     on_goal[k] += 1
+                    self.arrive_instances += 1
             # print("done", done[0])
             # print("tr", tr[0])
             # print("info", info[0])
         for k in range(num_agents):
-            
             prev_dist = self.planner._agent.planner[k].get_dist_to_goal(self.prev_observations[k]['xy'])
             dist = self.planner._agent.planner[k].get_dist_to_goal(observation[k]['xy']) 
             reward[k] += (prev_dist - dist) / self.plan_window
             reward[k] -= 0.01 * paths_len[k] / self.plan_window
-            reward[k] += on_goal[k] * 10
-        # print('*'*50)
-        # print(np.array2string(
-        #     cost_map[0],
-        #     precision=1,
-        #     suppress_small=True
-        # ))
-
+            # reward[k] += on_goal[k] * 10
+           
         # print("reward", reward[0])
         # print('*'*50)
         # print("key", info[0].keys())
